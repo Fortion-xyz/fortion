@@ -47,8 +47,11 @@ function explain({ snapshot: s, decision: d, market: m, policy }: Position): str
   const next =
     s.hoursToCorporateAction !== null ? `corporate action in ${Math.round(s.hoursToCorporateAction)}h` :
     s.minutesToWeekendClose !== null ? `weekend close in ${s.minutesToWeekendClose} min` : `market is ${m.status}`;
+  const earnings = m.nextEarnings
+    ? ` Next earnings: ${m.nextEarnings.at.toISOString().slice(0, 10)} (${m.nextEarnings.confirmed ? "confirmed" : "estimate, not acted on yet"}).`
+    : "";
   return `LTV ${pct(d.ltv)}, target ${pct(d.targetLtv)} (${policy.profile} profile), status ${d.status}. ` +
-    `Buffer covers a ${pct(Math.max(0, cushion))} drop before any share would be sold. Next risk event: ${next}.`;
+    `Buffer covers a ${pct(Math.max(0, cushion))} drop before any share would be sold. Next risk event: ${next}.${earnings}`;
 }
 
 await server.connect(new StdioServerTransport());

@@ -37,6 +37,12 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <Stat label="Cash available" value={usd(position.availableCash)} />
           <Stat label="Status" value={position.decision.status} />
           <p className="col-span-3 text-sm text-zinc-500">{position.decision.reason}</p>
+          {position.market.nextEarnings && (
+            <p className="col-span-3 text-sm">
+              Next earnings: {new Date(position.market.nextEarnings.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              {position.market.nextEarnings.confirmed ? "" : " (estimated)"}. The agent lowers the loan the day before.
+            </p>
+          )}
         </section>
       )}
 
