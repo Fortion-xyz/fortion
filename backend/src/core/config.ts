@@ -4,8 +4,9 @@ const env = z
   .object({
     BSC_RPC_URL: z.url().default("https://bsc-dataseed.bnbchain.org"),
     PORT: z.coerce.number().default(4000),
-    BINANCE_WEB3_API_URL: z.url().optional(),
+    BINANCE_WEB3_API_URL: z.url().default("https://web3.binance.com/build"),
     BINANCE_WEB3_API_KEY: z.string().optional(),
+    BINANCE_WEB3_API_SECRET: z.string().optional(),
     WATCH_ADDRESSES: z.string().default(""),
   })
   .parse(process.env);
@@ -13,7 +14,7 @@ const env = z
 export const config = {
   rpcUrl: env.BSC_RPC_URL,
   port: env.PORT,
-  binance: { url: env.BINANCE_WEB3_API_URL, key: env.BINANCE_WEB3_API_KEY },
+  binance: { url: env.BINANCE_WEB3_API_URL, key: env.BINANCE_WEB3_API_KEY, secret: env.BINANCE_WEB3_API_SECRET },
   watch: env.WATCH_ADDRESSES.split(",").map((a) => a.trim()).filter(Boolean),
 };
 
