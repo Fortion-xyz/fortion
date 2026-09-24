@@ -3,7 +3,8 @@
 // Verified live 25 Sep 2026: bStocks report reasonCode TRADING around the clock on weekdays and
 // marketStatus is null, so the regular session comes from the clock, not the API.
 import { binanceGet } from "./binance.ts";
-import { BSTOCKS, config, type Ticker } from "./config.ts";
+import { upcomingEarnings, type Earnings } from "./calendar.ts";
+import { BSTOCKS, type Ticker } from "./config.ts";
 import type { MarketStatus } from "./policy.ts";
 
 const RWA = "/api/v1/dex/market/rwa";
@@ -25,7 +26,8 @@ export interface MarketWindow {
   onchainUsd: number;
   referenceUsd: number;
   spread: number;
-  hoursToCorporateAction: number | null;
+  hoursToCorporateAction: number | null; // from confirmed dates only
+  nextEarnings: Earnings | null; // may be an estimate; shown to the user, not acted on
   minutesToWeekendClose: number | null;
 }
 
@@ -45,11 +47,12 @@ export function toMarketStatus(s: StatusInfo, regularSession: boolean): MarketSt
   }
 }
 
-export function toMarketWindow(ticker: Ticker, price: RwaPrice, status: StatusInfo, now: Date, actions: Date[] = []): MarketWindow {
+export function toMarketWindow(ticker: Ticker, price: RwaPrice, status: StatusInfo, now: Date, earnings: Earnings[] = []): MarketWindow {
   const onchainUsd = Number(price.tokenPrice);
   const referenceUsd = Number(price.referencePrice);
   const regularSession = isRegularSession(now);
-  const next = actions.map((d) => d.getTime() - now.getTime()).filter((ms) => ms > 0).sort((a, b) => a - b)[0];
+  const upcoming = earnings.filter((e) => e.at > now).sort((a, b) => +a.at - +b.at);
+  const next = upcoming.find((e) => e.confirmed);
   return {
     ticker,
     status: toMarketStatus(status, regularSession),
@@ -58,7 +61,8 @@ export function toMarketWindow(ticker: Ticker, price: RwaPrice, status: StatusIn
     onchainUsd,
     referenceUsd,
     spread: referenceUsd > 0 ? Math.abs(onchainUsd - referenceUsd) / referenceUsd : 1,
-    hoursToCorporateAction: next === undefined ? null : next / 3.6e6,
+    hoursToCorporateAction: next ? (+next.at - +now) / 3.6e6 : null,
+    nextEarnings: upcoming[0] ?? null,
     minutesToWeekendClose: minutesToWeekendClose(now),
   };
 }
@@ -86,8 +90,8 @@ function fetchRaw(ticker: Ticker) {
 }
 
 export async function getMarketWindow(ticker: Ticker, now = new Date()): Promise<MarketWindow> {
-  const { price, statusInfo } = await fetchRaw(ticker);
-  return toMarketWindow(ticker, price, statusInfo, now, config.corporateActions[ticker]);
+  const [{ price, statusInfo }, earnings] = await Promise.all([fetchRaw(ticker), upcomingEarnings(ticker, now)]);
+  return toMarketWindow(ticker, price, statusInfo, now, earnings);
 }
 
 function nyClock(now: Date) {

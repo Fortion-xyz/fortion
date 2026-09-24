@@ -43,10 +43,16 @@ test("spread from on-chain vs reference; zero reference never reads as tight", (
   assert.equal(toMarketWindow("NVDAB", price("1", "0"), status({}), REGULAR).spread, 1);
 });
 
-test("corporate action calendar: hours to the next future date, past dates ignored", () => {
-  const actions = parseCorporateActions("NVDAB=2026-09-22T00:00:00Z, nvdab=2026-09-24T11:00:00Z").NVDAB!;
-  assert.equal(toMarketWindow("NVDAB", price("1", "1"), status({}), REGULAR, actions).hoursToCorporateAction, 20);
-  assert.equal(toMarketWindow("NVDAB", price("1", "1"), status({}), REGULAR).hoursToCorporateAction, null);
+test("only confirmed dates drive the Guard; estimates are info only", () => {
+  const at = (iso: string, confirmed: boolean) => ({ at: new Date(iso), confirmed, source: "nasdaq" as const });
+  const w = toMarketWindow("NVDAB", price("1", "1"), status({}), REGULAR, [at("2026-09-24T11:00:00Z", true), at("2026-09-23T20:00:00Z", false)]);
+  assert.equal(w.hoursToCorporateAction, 20);
+  assert.equal(w.nextEarnings?.confirmed, false); // the estimate is sooner and still shown
+  assert.equal(toMarketWindow("NVDAB", price("1", "1"), status({}), REGULAR, [at("2026-09-24T11:00:00Z", false)]).hoursToCorporateAction, null);
+});
+
+test("operator calendar parsing", () => {
+  assert.equal(parseCorporateActions("NVDAB=2026-09-22T00:00:00Z, nvdab=2026-09-24T11:00:00Z").NVDAB!.length, 2);
   assert.throws(() => parseCorporateActions("NVDAB=soon"), /bad entry/);
 });
 
