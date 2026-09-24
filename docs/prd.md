@@ -5,7 +5,7 @@
 **Product name:** Fortion (internal codename: Gadai Saham). **Team name:** Fortion.
 **Hackathon:** BNB Hack: Tokenized Stocks Edition. Main Track + "Best Use of Agentic Wallet / Wallet Skills" + "Best Use of BNB Agent Studio"
 **Deadline:** 11 Oct 2026, 12:00 UTC. **Chain:** BSC mainnet (chainId 56). **Scope:** spot + lending only, no perps.
-**Status:** Concept locked, PRD v2 (24 Sep 2026): no custom contracts, positions live in the user's Binance Agentic Wallet
+**Status:** PRD v3 (25 Sep 2026): no custom contracts, positions live in the user's Binance Agentic Wallet. v3: mainnet verification done (go), live Venus parameters, user-chosen risk profiles.
 
 ---
 
@@ -58,7 +58,7 @@ Users never see "health factor," "collateral factor," or "vToken." They see: _St
 Catalog of bStocks accepted by Venus (NVDAB, TSLAB, SPCXB) with on-chain price, reference price, session badge, and halt status. One-tap buy with USDT via Trading API, executed through Agentic Wallet. Guarded by the same market-window and fair-price check as any order (spread > 1% blocks).
 
 **F2. Activate pledge**
-User selects a stock, an amount to pledge, and a mode:
+User selects a stock, an amount to pledge, a risk profile (F3), and a mode:
 
 - **Cash mode:** borrow USDT up to the safe line, send to user wallet (or schedule monthly "salary" draws).
 - **Accumulate mode:** borrow USDT, buy more of the same bStock, re-supply as collateral. Max 2 loops, resulting LTV never above target.
@@ -66,24 +66,39 @@ User selects a stock, an amount to pledge, and a mode:
 Under the hood: `approve` → Venus `vNVDAB.mint()` (supply) → `enterMarkets` → `vUSDT.borrow()`. Everything happens in and from the user's **Binance Agentic Wallet**. There is no Fortion contract and no custody: the vTokens, the debt, and the USDT buffer all sit in the user's own wallet. The keeper acts only through an Agentic Wallet scoped session (allowed contracts: Venus vTokens + Comptroller + Binance swap router; spend cap; expiry; revocable in one tap).
 
 **F3. The Guard (agent loop)**
-Persistent agent on BNB Agent Studio, every 60s and on every RWA status change:
+Persistent agent on BNB Agent Studio, every 60s and on every RWA status change.
 
-| Signal (source)                                                          | Effect on target LTV                                                                                                                                                                                                                                                       |
-| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Regular session, spread ≤ 0.5% (RWA price + market status)               | Normal target: 35% (limit 70% LT)                                                                                                                                                                                                                                          |
-| Friday 30 min before close, or any MARKET_CLOSED period                  | Weekend/overnight target: 30%                                                                                                                                                                                                                                              |
-| Earnings or corporate action within 24h, or ASSET_PAUSED / ASSET_LIMITED | Halt target: 25%, repay down before the halt starts, do nothing during halt                                                                                                                                                                                                |
-| Spread on-chain vs reference > 2% either direction                       | Freeze new borrows, tighten to 30%                                                                                                                                                                                                                                         |
-| Stock rises, LTV drops below target minus 5 points                       | Raise credit line: borrow the delta (Cash mode: to user, Accumulate mode: buy + re-supply)                                                                                                                                                                                 |
-| LTV ≥ 50%                                                                | Protecting: repay from the USDT buffer held in the user's Agentic Wallet                                                                                                                                                                                                   |
-| LTV ≥ 58% and buffer empty                                               | Last resort (default ON, user can turn off at setup with a clear warning): sell just enough bStock via Trading API to bring LTV to 40%, never more. Rationale: a Venus liquidation is also a sale, but with a 10% penalty at the oracle price. If turned off: notify only. |
+**Risk profile (user's choice).** The user picks one of three profiles at setup and can change it any time. The app never shows LTV; each option is described as "cash up to X% of your stock value, shares sold only after a Y% drop".
 
-Buffer rule: on every borrow, 15% of the drawn amount stays in the user's Agentic Wallet as USDT repayment buffer, tagged in the app as "Safety buffer". It is the user's money in the user's wallet; the app only asks them to keep it there while LTV > 35%, and the keeper uses it for repay under the session.
+| Threshold (for a stock with 70% LT)    | Steady (`conservative`) | Balanced (`balanced`, default) | Bold (`growth`) |
+| -------------------------------------- | ----------------------- | ------------------------------ | --------------- |
+| Normal target                          | 25%                     | 35%                            | 45%             |
+| Overnight / weekend / spread > 2%      | 20%                     | 30%                            | 38%             |
+| Halt / corporate action within 24h     | 15%                     | 25%                            | 30%             |
+| Protect (repay from buffer)            | 40%                     | 50%                            | 55%             |
+| Last resort (sell, buffer empty)       | 50%                     | 58%                            | 60%             |
+| Sell down to                           | 30%                     | 40%                            | 45%             |
+| Plain language: shares sold after a …  | 50% drop                | 40% drop                       | 25% drop        |
+
+**Per-stock scaling.** All thresholds are multiplied by `LT / 70%` using the market's liquidation threshold read on-chain, so a riskier stock is held lower automatically (SPCXB, LT 65%: Balanced normal target 32.5%, last resort 53.9%). Invariants enforced by unit tests for every profile and every live market: normal target < collateral factor (so the borrow cannot revert), last resort at least 8 points below LT, and halt < overnight < normal < protect < last resort.
+
+| Signal (source)                                                          | Effect on target LTV                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Regular session, spread ≤ 0.5% (RWA price + market status)               | Normal target                                                                                                                                                                                                                                                                        |
+| Regular session, spread 0.5–2%                                           | Normal target, new borrows blocked                                                                                                                                                                                                                                                   |
+| Friday 30 min before close, or any MARKET_CLOSED period                  | Overnight target                                                                                                                                                                                                                                                                     |
+| Earnings or corporate action within 24h, or ASSET_PAUSED / ASSET_LIMITED | Halt target, repay down before the halt starts, do nothing during halt                                                                                                                                                                                                               |
+| Spread on-chain vs reference > 2% either direction                       | Freeze new borrows, tighten to overnight target                                                                                                                                                                                                                                      |
+| Stock rises, LTV drops below target minus 5 points                       | Raise credit line: borrow the delta (Cash mode: to user, Accumulate mode: buy + re-supply)                                                                                                                                                                                           |
+| LTV ≥ protect line                                                       | Protecting: repay from the USDT buffer held in the user's Agentic Wallet                                                                                                                                                                                                             |
+| LTV ≥ last-resort line and buffer empty                                  | Last resort (default ON, user can turn off at setup with a clear warning): sell just enough bStock via Trading API to bring LTV to the sell-down line, never more. Rationale: a Venus liquidation is also a sale, but with a 10% penalty at the oracle price. If turned off: notify only. |
+
+Buffer rule: on every borrow, 15% of the drawn amount stays in the user's Agentic Wallet as USDT repayment buffer, tagged in the app as "Safety buffer". It is the user's money in the user's wallet; the app only asks them to keep it there while LTV is above the profile's normal target, and the keeper uses it for repay under the session.
 
 Every action is written as one sentence: "Repaid 42 USDT at 14:03 WIB because Nvidia earnings are in 20 hours and the token will be paused."
 
 **F4. Position screen**
-Stock value (shares × reference price, via multiplier), Cash available, Status, buffer balance, next scheduled event (earnings date, next market open), event log.
+Stock value (shares × reference price, via multiplier), Cash available (computed from the profile target, never from `getAccountLiquidity`, see §7), Status, risk profile, buffer balance, next scheduled event (earnings date, next market open), event log.
 
 **F5. MCP server**
 Same engine, exposed to Claude Desktop / Code and any MCP client:
@@ -93,7 +108,7 @@ Same engine, exposed to Claude Desktop / Code and any MCP client:
 | `get_position(address)`              | Stock value, borrowed, LTV, status, buffer, next event        |
 | `explain_risk(address)`              | Plain-language risk narrative with the numbers behind it      |
 | `available_cash(address)`            | How much more can be drawn safely right now, and why not more |
-| `set_policy(address, mode, targets)` | Change mode / targets within allowed ranges                   |
+| `set_policy(address, mode, profile)` | Change mode / risk profile                                    |
 | `draw_cash(address, usdt)`           | Borrow within safe line (requires session token)              |
 | `repay(address, usdt)`               | Manual repay                                                  |
 | `market_window(ticker)`              | Session status, next open/close, halt reason                  |
@@ -116,7 +131,7 @@ Perps, cross-chain, borrowing bStocks themselves (Venus borrow cap is 0), any cu
 | Component                                        | Role in Fortion                         | Concrete use                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ------------------------------------------------ | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **bStocks (BTech / Binance)**                    | The collateral asset                    | NVDAB, TSLAB, SPCXB BEP-20 tokens. Multiplier read to display shares.                                                                                                                                                                                                                                                                                                                                                                                 |
-| **Venus Protocol Core Pool**                     | The lending venue                       | `vNVDAB` / `vTSLAB` / `vSPCXB` supply, `vUSDT` borrow/repay. CF 60/60/50%, LT 70/70/65%, liq. incentive 10%, supply caps 450 NVDAB / 236 TSLAB / 500 SPCXB.                                                                                                                                                                                                                                                                                           |
+| **Venus Protocol Core Pool**                     | The lending venue                       | `vNVDAB` / `vTSLAB` / `vSPCXB` supply, `vUSDT` borrow/repay. CF 60/60/50%, LT 70/70/65%, liq. incentive 10%, supply caps 1,500 NVDAB / 236 TSLAB / 2,000 SPCXB (live 25 Sep 2026; room ~256 / ~122 / ~621). bStock borrowing paused. CF/LT are read on-chain at runtime, never hardcoded.                                                                                                                                                                                                                                                                                           |
 | **Binance Web3 API: RWA Data**                   | The market brain                        | `/rwa/price` (on-chain vs reference, share ratio), `/rwa/tokens` (Venus-eligible list), `/rwa/underlying-market` (status: TRADING, MARKET_CLOSED, ASSET_PAUSED + reason such as cash_dividend, stock_split), `/rwa/underlying-profile` (attestation reports shown as trust signal).                                                                                                                                                                   |
 | **Binance Web3 API: DeFi Data**                  | Position mirror                         | `/defi/data/position/list` for Venus positions incl. health factor as a cross-check against direct contract reads; `/defi/data/protocol/detail` for Venus TVL/APY.                                                                                                                                                                                                                                                                                    |
 | **Binance Web3 API: DeFi Transaction**           | Calldata for supply/redeem              | `/defi/transaction/deposit` and `/redeem` for Venus supply and withdraw. Borrow and repay are not covered by this API (finding for DevEx report), so they are built directly against vToken ABI with viem.                                                                                                                                                                                                                                            |
@@ -152,12 +167,14 @@ Perps, cross-chain, borrowing bStocks themselves (Venus borrow cap is 0), any cu
 
 **Trust boundary = Agentic Wallet session, not a contract.** The keeper never holds user funds. It receives a scoped session from the user's Agentic Wallet limited to: allowed contracts (Venus vNVDAB/vTSLAB/vSPCXB, vUSDT, Comptroller, Binance swap router), allowed tokens, daily spend cap, expiry, and one-tap revoke. Policy (`maxLtv`, `keeperCanSell`, `bufferBps`, mode) is stored off-chain in `@fortion/core` and enforced before every call, and every call is simulated first. This removes smart-contract risk from Fortion entirely and leans on Binance's own security model, which is also the strongest "Best Use of Agentic Wallet" story.
 
-**Direct contract calls (viem, ABI-level):** `vToken.mint`, `comptroller.enterMarkets`, `vUSDT.borrow`, `vUSDT.repayBorrow`, `vToken.redeemUnderlying`, `comptroller.getAccountLiquidity`, oracle `getUnderlyingPrice`. Every call is simulated through the Transaction API first.
+**Direct contract calls (viem, ABI-level):** `vToken.mint`, `comptroller.enterMarkets`, `vUSDT.borrow`, `vUSDT.repayBorrow`, `vToken.redeemUnderlying`, `comptroller.getAccountLiquidity`, `comptroller.markets` (CF, LT), oracle `getUnderlyingPrice`. Every call is simulated first (Transaction API, or `eth_simulateV1` for zero-fund dry runs).
+
+Verified Venus behaviour (25 Sep 2026): borrow is gated by the **collateral factor** and reverts above it; `getAccountLiquidity` reports headroom against the **liquidation threshold**, so it is a distance-to-liquidation number, not "cash you can still borrow". Many vToken failures return a non-zero error code instead of reverting, so every simulated result is decoded, not just its status.
 
 ## 8. User flows
 
 **Flow A. Pledge for cash (Dina holds 0.5 NVDAB, needs $50).**
-Open app → "Get cash without selling" → slider shows "Up to $57 today" (35% LTV of ~$95 collateral) → pick $50 → Agentic Wallet confirms supply + borrow + keeper session in one approval → $50 USDT spendable, $7.50 tagged as Safety buffer, all in her own wallet → Status: Safe. Under two minutes, no DeFi vocabulary.
+Open app → "Get cash without selling" → picks Balanced → slider shows "Up to $57 today" (Balanced target 35% of ~$95 collateral) → pick $50 → Agentic Wallet confirms supply + borrow + keeper session in one approval → $50 USDT spendable, $7.50 tagged as Safety buffer, all in her own wallet → Status: Safe. Under two minutes, no DeFi vocabulary.
 
 **Flow B. Guard through earnings (automatic).**
 Nvidia earnings Wednesday after close. Tuesday 22:00 WIB the keeper sees "corporate action in 24h" → repays from buffer to bring LTV from 35% to 25% → posts "Protecting: earnings tomorrow, loan reduced by $12, no shares sold." Thursday token resumes, price +6% → keeper restores LTV to 35% → "Credit line raised by $18, available to draw." Dina never opened the app.
@@ -184,7 +201,7 @@ Kept as `DEVEX_REPORT.md` from day 1, filled into the official template at the e
 1. DeFi Transaction API builds deposit/redeem but not borrow/repay for lending protocols; we had to go ABI-direct and only use the API for supply/withdraw and simulation.
 2. Whether DeFi Data `position/list` reflects Venus bStocks markets and how its health factor compares to `getAccountLiquidity`.
 3. How RWA `underlying-market` status codes lead the actual Venus oracle behaviour during halts (does the price freeze, does Dynamic Protection trigger).
-4. Venus supply caps (450 NVDAB, 236 TSLAB) as a hard ceiling for a consumer product.
+4. Venus supply caps as a hard ceiling for a consumer product (live 25 Sep: 1,500 NVDAB, 236 TSLAB, 2,000 SPCXB; different from launch coverage). `getAccountLiquidity` measures against LT while borrow is gated by CF.
 5. Agentic Wallet: whether existing DeFi skills cover Venus borrow/repay or a custom skill is required; session scope granularity (per-contract allowlist?), lifetime, and how an external Agent Studio keeper can hold a session.
 6. Agent Studio: scheduling granularity, cost per day for a 60s loop, gas self-funding behaviour.
 
@@ -192,7 +209,7 @@ Kept as `DEVEX_REPORT.md` from day 1, filled into the official template at the e
 
 | Days      | Deliverable                                                                                                                                                                                          |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 24–26 Sep | Verify on mainnet: Venus bStocks markets open for supply, caps not full, USDT borrow allowed against them, oracle behaviour off-hours. Apply for Web3 API key. Start DevEx log.                      |
+| 24–26 Sep | ✅ 25 Sep: supply open, caps have room, USDT borrow against all three bStocks proven by mainnet dry run. Open: oracle behaviour off-hours (weekend run), Web3 API key. DevEx log started.               |
 | 27–30 Sep | `@fortion/core`: RWA/market brain, policy engine, Venus tx builders (viem), simulate + broadcast wrappers. CLI test with $20 NVDAB.                                                                  |
 | 1–3 Oct   | Custom Wallet Skill `fortion-venus-stocks` (supply/borrow/repay/redeem on Venus, simulate-first) + keeper session flow with Agentic Wallet. End-to-end pledge on mainnet from a real Agentic Wallet. |
 | 4–6 Oct   | Agent Studio keeper: Guard loop, event log, alerts. Agentic Wallet onboarding + buy flow.                                                                                                            |
@@ -213,12 +230,13 @@ Kept as `DEVEX_REPORT.md` from day 1, filled into the official template at the e
 
 | Risk                                                                                                              | Mitigation                                                                                                                                                                                                             |
 | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Venus supply caps already full                                                                                    | Check day 1. Fallback: demo on whichever bStock has room; ListaDAO as second venue if it lists bStocks.                                                                                                                |
-| USDT borrow not enabled against bStocks collateral                                                                | Check day 1 via `getAccountLiquidity` after supply. If blocked, pivot to ListaDAO or another BSC lending market that lists bStocks (decide by 26 Sep). No own lending contract.                                        |
+| Venus supply caps already full                                                                                    | Checked 25 Sep: room on all three (tightest: TSLAB ~122). Re-check before demo. Fallback: demo on whichever bStock has room; ListaDAO as second venue if it lists bStocks.                                            |
+| USDT borrow not enabled against bStocks collateral                                                                | Resolved 25 Sep: borrow works for NVDAB, TSLAB, SPCXB (`simulate:pledge`). No pivot needed.                                                                                                                              |
+| One set of thresholds does not fit every stock (SPCXB LT 65% vs 70%)                                              | Thresholds scale with each market's on-chain LT; the user picks the risk profile. Invariants unit-tested.                                                                                                               |
 | Oracle freezes during halt so LTV cannot be read                                                                  | Policy engine uses reference price from RWA API as shadow oracle and acts on the more conservative of the two.                                                                                                         |
 | Agentic Wallet session cannot be delegated to an external Agent Studio keeper, or has no Venus borrow/repay skill | Build the custom Wallet Skill first (day 1–3 check). If delegation is blocked, run the Guard loop inside the Agentic Wallet automated-strategy runtime and keep Agent Studio as the intelligence + notification layer. |
 | Scope                                                                                                             | P0 frozen. Accumulate mode limited to 2 loops.                                                                                                                                                                         |
 
 ## 14. Open questions
 
-None. Decided 24 Sep: team name = Fortion; keeper last-resort sell = default ON (user can disable); b402 = P1, only after every P0 flow works for free.
+None. Decided 24 Sep: team name = Fortion; keeper last-resort sell = default ON (user can disable); b402 = P1, only after every P0 flow works for free. Decided 25 Sep: Guard thresholds are a user-chosen risk profile (Steady / Balanced / Bold), Balanced by default, scaled per stock by LT.
