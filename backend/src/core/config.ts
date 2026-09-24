@@ -4,18 +4,33 @@ const env = z
   .object({
     BSC_RPC_URL: z.url().default("https://bsc-dataseed.bnbchain.org"),
     PORT: z.coerce.number().default(4000),
-    BINANCE_WEB3_API_URL: z.url().optional(),
+    BINANCE_WEB3_API_URL: z.url().default("https://web3.binance.com/build"),
     BINANCE_WEB3_API_KEY: z.string().optional(),
+    BINANCE_WEB3_API_SECRET: z.string().optional(),
     WATCH_ADDRESSES: z.string().default(""),
+    // Binance RWA has no earnings date, so the operator supplies them: "NVDAB=2026-11-18T21:00:00Z,TSLAB=…"
+    CORPORATE_ACTIONS: z.string().default(""),
   })
   .parse(process.env);
 
 export const config = {
   rpcUrl: env.BSC_RPC_URL,
   port: env.PORT,
-  binance: { url: env.BINANCE_WEB3_API_URL, key: env.BINANCE_WEB3_API_KEY },
+  binance: { url: env.BINANCE_WEB3_API_URL, key: env.BINANCE_WEB3_API_KEY, secret: env.BINANCE_WEB3_API_SECRET },
   watch: env.WATCH_ADDRESSES.split(",").map((a) => a.trim()).filter(Boolean),
+  corporateActions: parseCorporateActions(env.CORPORATE_ACTIONS),
 };
+
+export function parseCorporateActions(raw: string): Record<string, Date[]> {
+  const out: Record<string, Date[]> = {};
+  for (const entry of raw.split(",").map((e) => e.trim()).filter(Boolean)) {
+    const [ticker, iso] = entry.split("=");
+    const at = new Date(iso ?? "");
+    if (!ticker || Number.isNaN(at.getTime())) throw new Error(`CORPORATE_ACTIONS: bad entry "${entry}", use TICKER=ISO-8601`);
+    (out[ticker.toUpperCase()] ??= []).push(at);
+  }
+  return out;
+}
 
 // Venus Core Pool, BSC mainnet. Verified 25 Sep 2026 via scripts/venus-markets.ts + venus-check.ts.
 export const USDT = "0x55d398326f99059fF775485246999027B3197955"; // BSC-USD, 18 decimals
