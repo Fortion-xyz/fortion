@@ -20,6 +20,16 @@ Filled into the official template at the end (PRD §10). Add findings as they ha
 - **25 Sep 2026, bStock swaps are RFQ.** Quote → swap returns EIP-712 typed data to sign → `order/submit` → poll. Not a plain transaction, so it cannot be batched or simulated like the Venus calls.
 - **25 Sep 2026, Agentic Wallet sessions can't be scoped or delegated.** No per-contract allowlist (only per-category daily USD caps + token list + Developer Mode expiry), no way to hand a session to an external agent such as a BNB Agent Studio keeper, sign-in lasts ~48h, and no in-wallet automation runtime. Venus borrow/repay is possible only as raw `contract-call` in Developer Mode. Agent Studio in turn has no Binance Agentic Wallet integration. The two prize-track products don't connect out of the box.
 
+- **25 Sep 2026, earnings dates had to come from outside Binance.** Nasdaq's keyless `api/analyst/{ticker}/earnings-date` separates company-scheduled (`expected*`) from algorithmic (`estimated`) dates in free text only, so we parse `reportText`. Third-party calendars disagreed with each other for all three stocks (e.g. TSLA 21 vs 28 Oct), and none of NVDA / TSLA / SPCX was company-confirmed yet.
+- **25 Sep 2026, SPCX is a listed stock and NVDA dividends accrue into the token.** `/underlying-profile`: SPCXB `assetType` 1 (listed SpaceX shares, not pre-IPO); NVDAB `tokenToShareRatio` 1.000778 with `latestDividend` 0.25, so ex-dividend dates are corporate actions too, not only earnings.
+
+## Evidence being collected
+
+`pnpm --filter backend monitor:rwa` (running since 25 Sep 22:47 UTC) logs every `statusInfo` change of all 46 bStocks each minute, plus Venus oracle vs RWA prices every 5 min, to `backend/data/rwa-monitor.jsonl`. Windows to read back:
+- Binance stock maintenance, 26 Sep 10:50–14:00 UTC: which `reasonCode` appears, and does the Venus oracle keep moving?
+- Weekend 26–28 Sep: oracle vs reference price while the stock market is closed (PRD §10.3).
+- Micron (MUB) earnings, 30 Sep after close: when `ASSET_LIMITED` / `ASSET_PAUSED` starts and ends relative to the release.
+
 ## To verify (PRD §10)
 
 1. DeFi Transaction API: deposit/redeem only, no borrow/repay for lending.
