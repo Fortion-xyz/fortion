@@ -12,10 +12,14 @@ Filled into the official template at the end (PRD §10). Add findings as they ha
 - **25 Sep 2026, SPCXB has CF 50% / LT 65%**, not the 60/70 of NVDAB/TSLAB. The PRD's ticker-agnostic 58% last-resort line leaves only 7 points to liquidation on SPCXB.
 - **25 Sep 2026, public BSC RPCs block `eth_getLogs`** (limit exceeded / archive-only / 50-block ranges), so finding existing Venus borrowers for a cross-check is impractical without a paid RPC or indexer. `eth_simulateV1` on the other hand is supported by every public RPC we tried, which makes full-flow dry runs free.
 
+- **25 Sep 2026, Binance Web3 API docs sit behind a bot challenge.** `curl` of web3.binance.com/en/dev-docs returns nothing; only a browser-like fetch reads them. The keyless `www.binance.com/bapi/...` RWA endpoints in the official `binance-tokenized-securities-info` skill use different field names (`sharesMultiplier`, `tokenInfo.price`) than the hackathon API (`tokenPrice`, `referencePrice`), which is confusing when both are "Binance RWA".
+- **25 Sep 2026, RWA API has no earnings date.** `statusInfo` tells you a stock is paused or limited *now*; the only forward-looking signal is membership in the "Upcoming Earnings" tab (`/tokens?tabId=3`) with no date. A lender needs "halt starts in N hours" to de-risk before the pause.
+- **25 Sep 2026, bStock swaps are RFQ.** Quote → swap returns EIP-712 typed data to sign → `order/submit` → poll. Not a plain transaction, so it cannot be batched or simulated like the Venus calls.
+- **25 Sep 2026, Agentic Wallet sessions can't be scoped or delegated.** No per-contract allowlist (only per-category daily USD caps + token list + Developer Mode expiry), no way to hand a session to an external agent such as a BNB Agent Studio keeper, sign-in lasts ~48h, and no in-wallet automation runtime. Venus borrow/repay is possible only as raw `contract-call` in Developer Mode. Agent Studio in turn has no Binance Agentic Wallet integration. The two prize-track products don't connect out of the box.
+
 ## To verify (PRD §10)
 
 1. DeFi Transaction API: deposit/redeem only, no borrow/repay for lending.
 2. DeFi Data `position/list` coverage of Venus bStock markets; health factor vs `getAccountLiquidity`.
 3. RWA `underlying-market` status vs Venus oracle behaviour during halts and off-hours (run `check:venus` over a weekend and compare prices).
-5. Agentic Wallet: Venus skill coverage, session scope granularity, delegation to an external keeper.
 6. Agent Studio: scheduling granularity, cost of a 60s loop, gas self-funding.
