@@ -1,11 +1,11 @@
-// Dry-run Flow A (PRD §8) against live BSC mainnet state, zero funds needed:
-// a fresh address gets a fake bStock balance via state override, then approve → mint →
-// enterMarkets → borrow USDT run in one eth_simulateV1 block.
+// Dry-run the full loan lifecycle against live BSC mainnet state, zero funds needed:
+// a fresh address gets a fake bStock balance via state override, then pledge (approve → mint →
+// enterMarkets → borrow), repay everything, and withdraw, all in one eth_simulateV1 block.
 // Usage: npx tsx scripts/simulate-pledge.ts [TICKER] [amount] [ltv]
 import { encodeAbiParameters, encodeFunctionData, formatUnits, keccak256, parseAbi, parseEther, type Address, type Hex } from "viem";
-import { BSTOCKS, TICKERS, USDT, VENUS, type Ticker } from "../src/core/config.ts";
+import { BSTOCKS, TICKERS, VENUS, type Ticker } from "../src/core/config.ts";
 import { client } from "../src/core/venus.ts";
-import { callError, pledge, type Call } from "../src/core/venus-tx.ts";
+import { callError, pledge, REPAY_ALL, repayUsdt, withdraw, type Call } from "../src/core/venus-tx.ts";
 
 const ticker = (process.argv[2] ?? "NVDAB").toUpperCase() as Ticker;
 if (!TICKERS.includes(ticker)) throw new Error(`ticker must be one of ${TICKERS.join(", ")}`);
@@ -43,13 +43,20 @@ const collateralUsd = Number(formatUnits(amount * price, 36));
 const borrow = parseEther((collateralUsd * ltv).toFixed(6));
 const slot = await balanceSlot(token);
 
-const read = (to: Address, functionName: "getAccountLiquidity" | "borrowBalanceStored" | "balanceOf", label: string): Call =>
-  ({ to, label, data: encodeFunctionData({ abi: reads, functionName, args: [account] }) });
-const calls = [
+type Step = Call & { read?: true };
+const read = (to: Address, functionName: "getAccountLiquidity" | "borrowBalanceStored" | "balanceOf", label: string): Step =>
+  ({ to, label, read: true, data: encodeFunctionData({ abi: reads, functionName, args: [account] }) });
+const state = (when: string) => [
+  read(VENUS.comptroller, "getAccountLiquidity", `${when}: liquidity (err / headroom to LT / shortfall)`),
+  read(VENUS.vUSDT, "borrowBalanceStored", `${when}: USDT debt`),
+  read(token, "balanceOf", `${when}: ${ticker} in wallet`),
+];
+const calls: Step[] = [
   ...pledge(ticker, amount, borrow),
-  read(VENUS.comptroller, "getAccountLiquidity", "account liquidity"),
-  read(VENUS.vUSDT, "borrowBalanceStored", "USDT debt"),
-  read(USDT, "balanceOf", "USDT in wallet"),
+  ...state("after pledge"),
+  ...repayUsdt(REPAY_ALL),
+  withdraw(ticker, (amount * 999n) / 1000n), // ponytail: 0.1% left for vToken exchange-rate rounding
+  ...state("after repay + withdraw"),
 ];
 
 console.log(`${ticker}: supply ${process.argv[3] ?? "1"} (~$${collateralUsd.toFixed(2)}), borrow ${(collateralUsd * ltv).toFixed(2)} USDT (${ltv * 100}% LTV)\n`);
@@ -66,7 +73,7 @@ let ok = true;
 results.forEach((r, i) => {
   const c = calls[i]!;
   if (r.status !== "success") return (ok = false), console.log(`✖ ${c.label}: reverted ${r.error?.message.split("\n")[0]}`);
-  if (i < calls.length - 3) {
+  if (!c.read) {
     const err = callError(c, r.data);
     if (err) ok = false;
     return console.log(err ? `✖ ${err}` : `✔ ${c.label}`);
@@ -74,5 +81,5 @@ results.forEach((r, i) => {
   const words = (r.data.slice(2).match(/.{64}/g) ?? []).map((w) => (Number(BigInt(`0x${w}`)) / 1e18).toFixed(2));
   console.log(`  ${c.label}: ${words.join(" / ")}`);
 });
-console.log(ok ? "\nGO: USDT can be borrowed against this bStock." : "\nNO-GO: see failures above.");
+console.log(ok ? "\nGO: pledge, borrow, repay and withdraw all work for this bStock." : "\nNO-GO: see failures above.");
 process.exitCode = ok ? 0 : 1;
