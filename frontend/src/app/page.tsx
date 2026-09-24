@@ -1,4 +1,5 @@
-import { getPosition, type Position } from "@/lib/api";
+import { getPolicy, getPosition, getProfiles, type Position } from "@/lib/api";
+import { ProfilePicker } from "./profile-picker";
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
@@ -7,13 +8,12 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const addr = typeof address === "string" ? address : "";
   let position: Position | null = null;
   let error: string | null = null;
-  if (addr) {
-    try {
-      position = await getPosition(addr);
-    } catch (e) {
-      error = (e as Error).message;
-    }
-  }
+  // Picker only needs the backend, so it still works while the position read fails (e.g. no Binance key yet).
+  const [picker, pos] = addr
+    ? await Promise.allSettled([Promise.all([getPolicy(addr), getProfiles()]), getPosition(addr)])
+    : [];
+  if (pos?.status === "fulfilled") position = pos.value;
+  else if (pos) error = (pos.reason as Error).message;
 
   return (
     <main className="mx-auto flex w-full max-w-xl flex-col gap-8 px-4 py-16">
@@ -38,6 +38,10 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <Stat label="Status" value={position.decision.status} />
           <p className="col-span-3 text-sm text-zinc-500">{position.decision.reason}</p>
         </section>
+      )}
+
+      {picker?.status === "fulfilled" && (
+        <ProfilePicker address={addr} current={picker.value[0].profile} profiles={picker.value[1]} />
       )}
     </main>
   );
