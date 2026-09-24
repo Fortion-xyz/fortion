@@ -33,5 +33,6 @@ MCP (Claude Desktop / Code): `pnpm --filter backend mcp`.
 
 ```sh
 pnpm --filter backend check:venus                     # caps, CF/LT, paused actions, oracle prices
-pnpm --filter backend simulate:pledge NVDAB 1 0.35    # dry-run supply + borrow on live mainnet state
+pnpm --filter backend simulate:pledge NVDAB 1 0.35    # dry-run pledge → repay → withdraw on live mainnet state
+pnpm --filter backend check:rwa                       # raw Binance RWA responses (needs API key in backend/.env)
 ```
