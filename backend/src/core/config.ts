@@ -17,7 +17,15 @@ export const config = {
   watch: env.WATCH_ADDRESSES.split(",").map((a) => a.trim()).filter(Boolean),
 };
 
-// Venus Core Pool, BSC mainnet. Verified 25 Sep 2026 via scripts/venus-markets.ts.
+// Venus Core Pool, BSC mainnet. Verified 25 Sep 2026 via scripts/venus-markets.ts + venus-check.ts.
+export const USDT = "0x55d398326f99059fF775485246999027B3197955"; // BSC-USD, 18 decimals
+
+export const BSTOCKS = {
+  NVDAB: "0x02Fca66C1D1aFB4E2A7884261eB00F63598a7436",
+  TSLAB: "0x5b1910eAaD6450E50f816082Aa078C41F10C292f",
+  SPCXB: "0xbe9D156892E55e7154BcD3cB0FEA677F9D3103E1",
+} as const;
+
 export const VENUS = {
   comptroller: "0xfD36E2c2a6789Db23113685031d7F16329158384",
   vUSDT: "0xfD5840Cd36d94D7229439859C0112a4185BC0255",

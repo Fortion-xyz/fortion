@@ -1,7 +1,7 @@
 // Read-only Venus position (PRD §7, direct ABI calls). Writes come with the Wallet Skill.
 import { createPublicClient, formatUnits, http, parseAbi, type Address } from "viem";
 import { bsc } from "viem/chains";
-import { config, VENUS, type Ticker } from "./config.ts";
+import { config, USDT, VENUS, type Ticker } from "./config.ts";
 
 export const client = createPublicClient({ chain: bsc, transport: http(config.rpcUrl) });
 
@@ -46,7 +46,6 @@ export async function readVenusPosition(account: Address, ticker: Ticker) {
 }
 
 const erc20Abi = parseAbi(["function balanceOf(address) view returns (uint256)"]);
-const USDT: Address = "0x55d398326f99059fF775485246999027B3197955"; // BSC-USD, 18 decimals
 
 export async function usdtBalance(account: Address): Promise<number> {
   return toUsd(await client.readContract({ address: USDT, abi: erc20Abi, functionName: "balanceOf", args: [account] }), 18);
