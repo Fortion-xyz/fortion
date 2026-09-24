@@ -1,0 +1,12 @@
+{
+  "name": "fortion",
+  "private": true,
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "dev:web": "pnpm --filter frontend dev",
+    "dev:api": "pnpm --filter backend dev:api",
+    "dev:keeper": "pnpm --filter backend dev:keeper",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
