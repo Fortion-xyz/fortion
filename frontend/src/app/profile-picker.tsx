@@ -22,7 +22,7 @@ export function ProfilePicker({ address, current, profiles }: {
         {(Object.keys(COPY) as RiskProfile[]).map((id) => {
           const t = profiles[id];
           return (
-            <label key={id} className="flex cursor-pointer gap-3 rounded-xl border p-4 has-[:checked]:border-black dark:has-[:checked]:border-white">
+            <label key={id} className="flex cursor-pointer gap-3 rounded-xl border border-zinc-200 p-4 has-checked:border-black has-checked:ring-1 has-checked:ring-black dark:border-zinc-800 dark:has-checked:border-white dark:has-checked:ring-white">
               <input type="radio" name="profile" value={id} defaultChecked={id === current} className="mt-1" />
               <span className="flex flex-col gap-1">
                 <span className="font-semibold">{COPY[id].name}</span>
