@@ -28,3 +28,10 @@ pnpm test && pnpm typecheck
 ```
 
 MCP (Claude Desktop / Code): `pnpm --filter backend mcp`.
+
+## On-chain checks (no funds needed)
+
+```sh
+pnpm --filter backend check:venus                     # caps, CF/LT, paused actions, oracle prices
+pnpm --filter backend simulate:pledge NVDAB 1 0.35    # dry-run supply + borrow on live mainnet state
+```
