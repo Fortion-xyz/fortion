@@ -13,9 +13,22 @@ interface Envelope<T> {
   data: T;
 }
 
+// ponytail: one in-process queue, 4 req/s. Measured 25 Sep: ~5 req/s per API key across all endpoints,
+// then 429. The limit is per key, so the API and the keeper running on one key can still exceed it
+// together; give the keeper its own key (or a shared limiter) once both run 24/7.
+const MIN_GAP_MS = 250;
+let slot = Promise.resolve();
+function throttle(): Promise<void> {
+  const mine = slot.then(() => new Promise<void>((r) => setTimeout(r, MIN_GAP_MS)));
+  const turn = slot;
+  slot = mine;
+  return turn;
+}
+
 async function request<T>(method: "GET" | "POST", path: string, query: Record<string, string> = {}, body?: unknown): Promise<T> {
   const { url: base, key, secret } = config.binance;
   if (!key || !secret) throw new Error("BINANCE_WEB3_API_KEY / BINANCE_WEB3_API_SECRET are not configured");
+  await throttle();
   const url = new URL(`${base}${path}`);
   for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
   const bodyText = body === undefined ? "" : JSON.stringify(body);
