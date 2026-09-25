@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "check:venus": "tsx --env-file-if-exists=.env scripts/venus-check.ts",
     "simulate:pledge": "tsx --env-file-if-exists=.env scripts/simulate-pledge.ts",
-    "check:rwa": "tsx --env-file-if-exists=.env scripts/rwa-check.ts"
+    "check:rwa": "tsx --env-file-if-exists=.env scripts/rwa-check.ts",
+    "monitor:rwa": "tsx --env-file-if-exists=.env scripts/rwa-monitor.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",

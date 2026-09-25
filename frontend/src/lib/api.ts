@@ -15,6 +15,7 @@ export interface Position {
   snapshot: { collateralUsd: number; debtUsd: number; bufferUsd: number };
   decision: { ltv: number; targetLtv: number; status: "Safe" | "Careful" | "Protecting"; reason: string };
   availableCash: number;
+  market: { nextEarnings: { at: string; confirmed: boolean } | null };
 }
 
 const API_URL = process.env.API_URL ?? "http://localhost:4000";
