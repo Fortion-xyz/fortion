@@ -27,6 +27,8 @@ Filled into the official template at the end (PRD §10). Add findings as they ha
 - **27 Sep 2026 (monitor), `referencePrice` is derived from the token price.** Every sample satisfies `referencePrice = tokenPrice / tokenToShareRatio` (NVDAB 224.99 / 1.000778 = 224.815; TSLAB/SPCXB ratio 1 → equal). The name suggests an exchange quote; it isn't one, so it can't reveal a weekend gap. We added the Nasdaq last sale as the real reference.
 - **27 Sep 2026 (monitor), the Venus oracle is live on weekends.** NVDAB oracle moved 224.30–225.26 on Saturday, tracking the on-chain price within ~0.1%. No freeze, no Dynamic Protection trigger observed. The gap risk is token vs stock, not a frozen oracle.
 
+- **27 Sep 2026, NVDAB supply cap almost full.** Room fell from ~256 NVDAB (25 Sep) to ~1.2 NVDAB (27 Sep) out of a 1,500 cap. Nothing in the Binance APIs surfaces this; a consumer app must read `Comptroller.supplyCaps` itself or a pledge fails at `mint`.
+
 ## Evidence being collected
 
 `pnpm --filter backend monitor:rwa` (running since 25 Sep 22:47 UTC) logs every `statusInfo` change of all 46 bStocks each minute, plus Venus oracle vs RWA prices every 5 min, to `backend/data/rwa-monitor.jsonl`. Windows to read back:

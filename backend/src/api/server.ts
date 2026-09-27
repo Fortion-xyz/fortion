@@ -5,6 +5,7 @@ import { z } from "zod";
 import { config } from "../core/config.ts";
 import { PROFILES, type RiskProfile } from "../core/policy.ts";
 import { getMarketWindow } from "../core/market.ts";
+import { listStocks } from "../core/stocks.ts";
 import { db, getPolicy, getPosition, InputError, parseAddress, parseTicker, setPolicy } from "../core/position.ts";
 
 const policyBody = z.object({
@@ -19,6 +20,7 @@ const app = new Hono()
   .get("/position/:address", async (c) =>
     c.json(await getPosition(parseAddress(c.req.param("address")), parseTicker(c.req.query("ticker")))),
   )
+  .get("/stocks", async (c) => c.json(await listStocks()))
   .get("/profiles", (c) => c.json(PROFILES))
   .get("/policy/:address", (c) => c.json(getPolicy(parseAddress(c.req.param("address")))))
   .get("/events/:address", (c) => {
