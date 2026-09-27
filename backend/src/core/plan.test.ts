@@ -29,7 +29,7 @@ test("accumulate raise → borrow, buy the same stock, supply what was bought", 
   assert.deepEqual(labels(p), ["borrow USDT", "buy NVDAB", "supply the NVDAB just bought"]);
   assert.ok("steps" in p);
   const swap = p.steps[1]!;
-  assert.ok(swap.kind === "swap" && swap.swap.fromToken === USDT && swap.swap.toToken === BSTOCKS.NVDAB && swap.swap.qty === "7.00");
+  assert.ok(swap.kind === "swap" && swap.swap.fromToken === USDT && swap.swap.toToken === BSTOCKS.NVDAB && swap.swap.qty === "5.95");
   const lazy = p.steps[2]!;
   assert.ok(lazy.kind === "lazy");
   const calls = await lazy.build();
@@ -56,4 +56,16 @@ test("no safe room to withdraw → blocked with a reason", () => {
 
 test("hold and notify sign nothing", () => {
   for (const kind of ["hold", "notify"] as const) assert.deepEqual(plan(d({ kind }), DEFAULT_POLICY, ctx()), { steps: [] });
+});
+
+test("Important #8: accumulate keeps the 15% safety buffer and never swaps more than was borrowed", () => {
+  const qty = (usd: number) => {
+    const p = plan(d({ kind: "borrow", usd }), { ...DEFAULT_POLICY, mode: "accumulate" }, ctx());
+    assert.ok("steps" in p);
+    const s = p.steps[1]!;
+    return s.kind === "swap" ? s.swap.qty : "";
+  };
+  assert.equal(qty(7), "5.95"); // 85% of 7
+  assert.equal(qty(7.009), "5.95"); // rounded down, not up
+  assert.ok(Number(qty(0.0199)) <= 0.0199 * 0.85);
 });

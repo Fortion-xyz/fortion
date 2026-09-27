@@ -163,3 +163,34 @@ test("resolveSigner: only with EXECUTE, a signed-in host, and the right wallet",
   assert.match((await resolveSigner(FROM, true, host("CONNECTED", "0x00000000000000000000000000000000000000BB"))).why!, /not the Agentic Wallet/);
   assert.equal((await resolveSigner(FROM, true, host("CONNECTED", FROM))).signer?.from, FROM);
 });
+
+test("Critical #2: a thrown signer error becomes a recorded failure, never an exception", async () => {
+  const baw = { run: (async () => { throw new Error("baw timed out"); }) as Run };
+  const r = await execute(FROM, repay, { signer: bawSigner(FROM, { run: baw.run, waitReceipt: receipt("success") }), simulate: simOk });
+  assert.equal(r.outcome, "failed");
+  assert.match(r.error!, /baw timed out/);
+});
+
+test("Critical #2: a broadcast whose receipt times out is pending with its hash kept, so it isn't re-sent", async () => {
+  const baw = fakeBaw({ "contract-call preview": [preview("r1")], "contract-call execute": [broadcast("0xlag")] });
+  const slow = async () => { throw new Error("Timed out while waiting for transaction"); };
+  const r = await execute(FROM, repay, { signer: bawSigner(FROM, { run: baw.run, waitReceipt: slow }), simulate: simOk });
+  assert.equal(r.outcome, "pending");
+  assert.deepEqual(r.txHashes, ["0xlag"]);
+  assert.match(r.error!, /0xlag/);
+});
+
+test("Important #6: a Venus call that fails without reverting (Failure event) is failed, not done", async () => {
+  const { toEventSelector, encodeAbiParameters } = await import("viem");
+  const failureTopic = toEventSelector("Failure(uint256,uint256,uint256)");
+  const [, repayCall] = repayUsdt(10n);
+  const baw = fakeBaw({ "contract-call preview": [preview("r1"), preview("r2")], "contract-call execute": [broadcast("0x1"), broadcast("0x2")] });
+  const withFailure = async (h: Hex) => ({
+    status: "success" as const,
+    logs: h === "0x2" ? [{ address: repayCall!.to, topics: [failureTopic], data: encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }], [3n, 38n, 0n]) }] : [],
+  });
+  const r = await execute(FROM, repay, { signer: bawSigner(FROM, { run: baw.run, waitReceipt: withFailure }), simulate: simOk });
+  assert.equal(r.outcome, "failed");
+  assert.match(r.error!, /Venus rejected .*error 3/);
+  assert.deepEqual(r.txHashes, ["0x1", "0x2"]);
+});
