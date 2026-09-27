@@ -35,7 +35,8 @@ export interface Decision {
   targetLtv: number;
   thresholds: Thresholds;
   status: Status;
-  reason: string;
+  reason: string; // the sentence for a completed action (or the heads-up itself)
+  cause?: string; // why the Guard wants to act, for sentences about planned / failed actions
 }
 
 export const DEFAULT_POLICY: Policy = { mode: "cash", profile: "balanced", keeperCanSell: true, bufferBps: 1500 };
@@ -81,6 +82,8 @@ export function targetLtv(s: Snapshot, profile: RiskProfile): { target: number; 
       canBorrow: false,
       why: `earnings or a corporate action is ${Math.round(s.hoursToCorporateAction)} hours away and trading will pause`,
     };
+  if (!Number.isFinite(s.spread))
+    return { target: t.overnight, canBorrow: false, why: "the real stock price can't be checked right now" };
   if (s.spread > 0.02)
     return { target: t.overnight, canBorrow: false, why: "the token price has drifted away from the real stock price" };
   if (s.market === "MARKET_CLOSED")
@@ -96,13 +99,14 @@ export function decide(s: Snapshot, p: Policy = DEFAULT_POLICY): Decision {
   const t = thresholds(p.profile, s.liquidationThreshold);
   const { target, canBorrow, why } = targetLtv(s, p.profile);
   const halted = s.market === "ASSET_PAUSED" || s.market === "ASSET_LIMITED";
-  const out = (action: Action, status: Status, reason: string): Decision => ({
+  const out = (action: Action, status: Status, reason: string, cause?: string): Decision => ({
     action,
     ltv,
     targetLtv: target,
     thresholds: t,
     status,
     reason,
+    ...(cause ? { cause } : {}),
   });
   const repayToTarget = Math.max(0, s.debtUsd - target * s.collateralUsd);
 
@@ -112,13 +116,13 @@ export function decide(s: Snapshot, p: Policy = DEFAULT_POLICY): Decision {
       return out({ kind: "notify" }, "Protecting", `Your loan needs attention: the safety buffer is empty and ${halted ? "the stock is paused, so nothing can be sold" : "automatic selling is turned off"}. Add USDT or repay now.`);
     // Sell X of collateral and repay X: (D − X) / (C − X) = afterSell.
     const usd = (s.debtUsd - t.afterSell * s.collateralUsd) / (1 - t.afterSell);
-    return out({ kind: "sell", usd }, "Protecting", `Sold ${usd$(usd)} of stock to keep your loan safe, only what was needed. A forced sale by the lender would have sold more, with a penalty.`);
+    return out({ kind: "sell", usd }, "Protecting", `Sold ${usd$(usd)} of stock to keep your loan safe, only what was needed. A forced sale by the lender would have sold more, with a penalty.`, "the loan is close to a forced sale and the safety buffer is empty");
   }
 
   if (ltv >= t.protect || ltv > target) {
     const usd = Math.min(repayToTarget, s.bufferUsd);
     if (usd >= MIN_ACTION_USD)
-      return out({ kind: "repay", usd }, "Protecting", `Repaid ${usd$(usd)} from the safety buffer because ${why}.`);
+      return out({ kind: "repay", usd }, "Protecting", `Repaid ${usd$(usd)} from the safety buffer because ${why}.`, why);
     return out({ kind: "notify" }, ltv >= t.protect ? "Protecting" : "Careful", `Your loan is above your limit because ${why}, and the safety buffer can't cover it. Add USDT or repay.`);
   }
 
@@ -127,7 +131,7 @@ export function decide(s: Snapshot, p: Policy = DEFAULT_POLICY): Decision {
     const usd = target * s.collateralUsd - s.debtUsd;
     if (usd >= MIN_ACTION_USD) {
       const where = p.mode === "cash" ? "ready to draw" : "going into more of the same stock";
-      return out({ kind: "borrow", usd }, "Safe", `Your credit line grew by ${usd$(usd)} because the stock rose. It's ${where}.`);
+      return out({ kind: "borrow", usd }, "Safe", `Your credit line grew by ${usd$(usd)} because the stock rose. It's ${where}.`, "the stock rose");
     }
   }
 

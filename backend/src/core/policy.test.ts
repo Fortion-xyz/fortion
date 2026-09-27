@@ -139,3 +139,12 @@ test("the user can draw off-hours up to the overnight target; only pauses and >2
   assert.equal(availableCash({ ...empty, spread: 0.03 }, "balanced"), 0);
   assert.ok(Math.abs(availableCash({ ...empty, hoursToCorporateAction: 5 }, "balanced") - 25) < 1e-9, "before earnings: up to the halt target");
 });
+
+test("Important #5: unknown stock price freezes new borrowing, keeps repaying, and says why", () => {
+  const unknown = { ...base, spread: Infinity };
+  assert.equal(availableCash({ ...unknown, debtUsd: 0 }, "balanced"), 0);
+  assert.notEqual(decide({ ...unknown, collateralUsd: 200 }).action.kind, "borrow");
+  const d = decide({ ...unknown, debtUsd: 40 });
+  assert.equal(d.action.kind, "repay");
+  assert.match(d.reason, /real stock price can't be checked/);
+});

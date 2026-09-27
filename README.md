@@ -52,6 +52,9 @@ pnpm test && pnpm typecheck
    dry run.
 
 Signing needs all three: `EXECUTE=1`, a signed-in host, and the address being the signed-in wallet.
+Policy changes (they steer what the keeper signs) need the operator token: set `FORTION_API_TOKEN`
+in `backend/.env` and the same value as `API_TOKEN` in `frontend/.env.local` (server-side only).
+Without it, policy writes are off. Restrict browsers with `CORS_ORIGIN`.
 Binance's own limits (daily caps, Developer Mode expiry, App confirmations) stay in force.
 
 ### Other surfaces

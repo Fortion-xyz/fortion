@@ -3,7 +3,7 @@
 // Docs: binance/binance-skills-hub skills/binance-web3/binance-agentic-wallet/references/{external-sign,market-order}.md
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import type { Address, Hex } from "viem";
+import { decodeAbiParameters, toEventSelector, type Address, type Hex } from "viem";
 import { client } from "./venus.ts";
 import type { Call } from "./venus-tx.ts";
 
@@ -16,7 +16,7 @@ export interface Swap {
 
 export type SendResult =
   | { status: "mined"; txHash: Hex }
-  | { status: "pending"; note: string } // needs the user in the Binance App, or a swap still processing
+  | { status: "pending"; note: string; txHash?: Hex } // needs the user in the App, a swap still processing, or a receipt still coming
   | { status: "failed"; error: string; txHash?: Hex };
 
 export interface Signer {
@@ -62,6 +62,12 @@ export function parseBaw<T>(stdout: string): BawResult<T> {
 
 const errorText = (r: BawResult<unknown>) => [r.error?.message, r.error?.name, r.error?.code].filter(Boolean).join(" · ") || "baw failed";
 
+interface Receipt {
+  status: "success" | "reverted";
+  logs?: readonly { address: Address; topics: readonly Hex[]; data: Hex }[];
+}
+const FAILURE_TOPIC = toEventSelector("Failure(uint256,uint256,uint256)");
+
 interface Preview {
   requestId: string;
   simulationResult?: { simulationErrorDetail?: string | null };
@@ -72,15 +78,30 @@ interface Order { orderId: string; status: "PENDING" | "FINISHED" | "FAILED"; tx
 
 export function bawSigner(
   from: Address,
-  deps: { run?: Run; waitReceipt?: (h: Hex) => Promise<{ status: "success" | "reverted" }>; pollMs?: number; pollTries?: number } = {},
+  deps: { run?: Run; waitReceipt?: (h: Hex) => Promise<Receipt>; pollMs?: number; pollTries?: number } = {},
 ): Signer {
   const run = deps.run ?? runBaw;
   const waitReceipt = deps.waitReceipt ?? ((hash: Hex) => client.waitForTransactionReceipt({ hash, timeout: 120_000 }));
   const pollMs = deps.pollMs ?? 3_000;
   const pollTries = deps.pollTries ?? 40;
 
-  const mined = async (txHash: Hex): Promise<SendResult> =>
-    (await waitReceipt(txHash)).status === "success" ? { status: "mined", txHash } : { status: "failed", error: "transaction reverted on chain", txHash };
+  const mined = async (txHash: Hex, target?: Address): Promise<SendResult> => {
+    let receipt: Receipt;
+    try {
+      receipt = await waitReceipt(txHash);
+    } catch {
+      // Broadcast but not confirmed yet: it may still land. Pending (not failed) so it is never re-sent.
+      return { status: "pending", note: `Sent ${txHash}; still waiting for the chain to confirm it.`, txHash };
+    }
+    if (receipt.status !== "success") return { status: "failed", error: "transaction reverted on chain", txHash };
+    // Compound-style vTokens can mine "successfully" yet reject the action, emitting Failure instead.
+    const failure = receipt.logs?.find((l) => l.topics[0] === FAILURE_TOPIC && (!target || l.address.toLowerCase() === target.toLowerCase()));
+    if (failure) {
+      const [code] = decodeAbiParameters([{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }], failure.data);
+      return { status: "failed", error: `Venus rejected the transaction (error ${code}) though it was mined`, txHash };
+    }
+    return { status: "mined", txHash };
+  };
 
   return {
     kind: "baw",
@@ -98,7 +119,7 @@ export function bawSigner(
       if (!e.success || !e.data) return { status: "failed", error: `${call.label}: ${errorText(e)}` };
       if (e.data.status === "PENDING_CONFIRMATION") return { status: "pending", note: `Waiting for you to confirm in the Binance App (order ${e.data.orderId}).` };
       if (!e.data.txHash) return { status: "failed", error: `${call.label}: broadcast returned no transaction hash` };
-      return mined(e.data.txHash);
+      return mined(e.data.txHash, call.to);
     },
     async swap(s) {
       const sub = parseBaw<{ orderId: string }>(

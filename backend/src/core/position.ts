@@ -32,20 +32,35 @@ export function conservativeCollateral(venusUsd: number, m: { referenceUsd: numb
   return venusUsd * Math.min(1, m.stockUsd / m.referenceUsd);
 }
 
+/**
+ * Venus debt (vUSDT) and the USDT buffer are account-wide; collateral is per stock. Each stock's Guard
+ * pass carries its share by collateral value, so it sees the account's true LTV and stocks the user
+ * never pledged carry nothing (review Critical #3). With no collateral anywhere, the first stock
+ * alone reports the debt so it is surfaced once, not three times.
+ */
+export function debtShare(collateral: Record<Ticker, number>, ticker: Ticker, debtUsd: number, bufferUsd: number) {
+  const total = TICKERS.reduce((sum, t) => sum + collateral[t], 0);
+  const share = total > 0 ? collateral[ticker] / total : ticker === TICKERS[0] ? 1 : 0;
+  return { debtUsd: debtUsd * share, bufferUsd: bufferUsd * share };
+}
+
 export async function getPosition(account: Address, ticker: Ticker) {
   const policy = getPolicy(account);
-  const [venus, usdt, market] = await Promise.all([
-    readVenusPosition(account, ticker),
+  const [markets, usdt, market] = await Promise.all([
+    Promise.all(TICKERS.map((t) => readVenusPosition(account, t))),
     usdtBalance(account),
     getMarketWindow(ticker),
   ]);
+  const venus = markets[TICKERS.indexOf(ticker)]!;
   const collateralUsd = conservativeCollateral(venus.collateralUsd, market);
   // ponytail: buffer = the tagged 15% of debt, capped by what is actually in the wallet.
-  const bufferUsd = Math.min(usdt, (venus.debtUsd * policy.bufferBps) / 10_000);
+  const accountBuffer = Math.min(usdt, (venus.debtUsd * policy.bufferBps) / 10_000);
+  const byTicker = Object.fromEntries(TICKERS.map((t, i) => [t, markets[i]!.collateralUsd])) as Record<Ticker, number>;
+  const share = debtShare(byTicker, ticker, venus.debtUsd, accountBuffer);
   const snapshot: Snapshot = {
     collateralUsd,
-    debtUsd: venus.debtUsd,
-    bufferUsd,
+    debtUsd: share.debtUsd,
+    bufferUsd: share.bufferUsd,
     market: market.status,
     spread: market.spread,
     hoursToCorporateAction: market.hoursToCorporateAction,

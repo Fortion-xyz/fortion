@@ -31,14 +31,24 @@ function segment(steps: Step[], i: number): Call[] {
   return out;
 }
 
-export async function execute(account: Address, steps: Step[], { signer, simulate }: Deps): Promise<Execution> {
+export async function execute(account: Address, steps: Step[], deps: Deps): Promise<Execution> {
   const txHashes: Hex[] = [];
-  let stepsDone = 0;
-  const stop = (outcome: Execution["outcome"], error?: string): Execution => ({ outcome, txHashes, stepsDone, ...(error ? { error } : {}) });
+  const progress = { stepsDone: 0 };
+  try {
+    return await run(account, steps, deps, txHashes, progress);
+  } catch (err) {
+    // A thrown error (baw timeout, RPC down) must end as a recorded outcome, never an exception:
+    // the caller records it and the cooldown applies (review Critical #2).
+    return { outcome: "failed", txHashes, stepsDone: progress.stepsDone, error: (err as Error).message };
+  }
+}
 
-  const land = async (r: SendResult): Promise<boolean> => {
+async function run(account: Address, steps: Step[], { signer, simulate }: Deps, txHashes: Hex[], progress: { stepsDone: number }): Promise<Execution> {
+  const stop = (outcome: Execution["outcome"], error?: string): Execution => ({ outcome, txHashes, stepsDone: progress.stepsDone, ...(error ? { error } : {}) });
+
+  const land = (r: SendResult): boolean => {
     if (r.status === "mined") return txHashes.push(r.txHash), true;
-    if (r.status === "failed" && r.txHash) txHashes.push(r.txHash);
+    if (r.txHash) txHashes.push(r.txHash);
     return false;
   };
 
@@ -54,10 +64,10 @@ export async function execute(account: Address, steps: Step[], { signer, simulat
       if (!sim.ok) return stop("failed", sim.steps.find((s) => s.error)?.error ?? "simulation failed");
       for (const c of calls) {
         const r = await signer.send(c);
-        if (r.status === "pending") return stop("pending", r.note);
-        if (!(await land(r))) return stop("failed", (r as { error: string }).error);
+        if (r.status === "pending") return land(r), stop("pending", r.note);
+        if (!land(r)) return stop("failed", (r as { error: string }).error);
       }
-      stepsDone++;
+      progress.stepsDone++;
       continue;
     }
 
@@ -70,9 +80,9 @@ export async function execute(account: Address, steps: Step[], { signer, simulat
     }
     if (!signer) continue;
     const r = step.kind === "call" ? await signer.send(step.call) : await signer.swap(step.swap);
-    if (r.status === "pending") return stop("pending", r.note);
-    if (!(await land(r))) return stop("failed", (r as { error: string }).error);
-    stepsDone++;
+    if (r.status === "pending") return land(r), stop("pending", r.note);
+    if (!land(r)) return stop("failed", (r as { error: string }).error);
+    progress.stepsDone++;
   }
   return signer ? stop("done") : stop("dry-run");
 }
