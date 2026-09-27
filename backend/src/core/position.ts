@@ -52,7 +52,7 @@ export async function getPosition(account: Address, ticker: Ticker) {
     minutesToWeekendClose: market.minutesToWeekendClose,
     liquidationThreshold: venus.liquidationThreshold,
   };
-  return { account, ticker, policy, snapshot, market, decision: decide(snapshot, policy), availableCash: availableCash(snapshot, policy.profile) };
+  return { account, ticker, policy, snapshot, market, collateralFactor: venus.collateralFactor, decision: decide(snapshot, policy), availableCash: availableCash(snapshot, policy.profile) };
 }
 
 export type Position = Awaited<ReturnType<typeof getPosition>>;

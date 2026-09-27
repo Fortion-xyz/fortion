@@ -2,6 +2,7 @@
 // Execution path = PRD §14 option 1 (hybrid): this process runs the `baw` CLI after the user's QR sign-in.
 // Docs: binance/binance-skills-hub skills/binance-web3/binance-agentic-wallet/references/{external-sign,market-order}.md
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import type { Address, Hex } from "viem";
 import { client } from "./venus.ts";
 import type { Call } from "./venus-tx.ts";
@@ -28,9 +29,13 @@ export interface Signer {
 /** Runs `baw <args>` and returns stdout. Injected in tests. */
 export type Run = (args: string[]) => Promise<string>;
 
+// Prefer the pinned local CLI (backend dependency @binance/agentic-wallet), fall back to a global `baw`.
+const LOCAL_BAW = new URL("../../node_modules/.bin/baw", import.meta.url).pathname;
+const BAW = existsSync(LOCAL_BAW) ? LOCAL_BAW : "baw";
+
 export const runBaw: Run = (args) =>
   new Promise((resolve, reject) =>
-    execFile("baw", args, { timeout: 120_000, maxBuffer: 4 << 20 }, (err, stdout, stderr) => {
+    execFile(BAW, args, { timeout: 120_000, maxBuffer: 4 << 20 }, (err, stdout, stderr) => {
       if (err && (err as NodeJS.ErrnoException).code === "ENOENT")
         return reject(new Error("baw CLI not found: npm install -g @binance/agentic-wallet@1.10.0"));
       // baw prints its JSON result on stdout even when it exits non-zero.
@@ -119,4 +124,11 @@ export async function walletStatus(run: Run = runBaw): Promise<{ connected: bool
   if (r.success && r.data?.status === "CONNECTED") return { connected: true };
   // baw 1.10.0 answers `SERVICE_ERROR: illegal parameter` (not UNCONNECTED) when never signed in.
   return { connected: false, detail: `Not signed in (${r.data?.status ?? errorText(r)}). Run \`fortion signin\` or \`baw auth signin\` and confirm in the Binance App.` };
+}
+
+/** EVM addresses of the signed-in Agentic Wallet, lowercased. Parsed loosely: the exact shape isn't documented per chain. */
+export async function walletAddresses(run: Run = runBaw): Promise<string[]> {
+  const out = await run(["wallet", "address", "--json"]).catch(() => "");
+  if (!parseBaw(out).success) return [];
+  return [...new Set((out.match(/0x[0-9a-fA-F]{40}/g) ?? []).map((a) => a.toLowerCase()))];
 }

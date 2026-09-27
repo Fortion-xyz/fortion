@@ -123,3 +123,34 @@ test("wallet status: connected, documented UNCONNECTED, and the real not-signed-
   assert.equal(r.connected, false);
   assert.match(r.detail!, /baw auth signin/);
 });
+
+test("a lazy step is built after the swap lands, then simulated and sent", async () => {
+  const baw = fakeBaw({
+    "market-order swap": [ok({ orderId: "s1" })],
+    "market-order list": [ok({ list: [{ orderId: "s1", status: "FINISHED", txHash: "0xswap" }] })],
+    "contract-call preview": [preview("r1"), preview("r2")],
+    "contract-call execute": [broadcast("0x1"), broadcast("0x2")],
+  });
+  const order: string[] = [];
+  const swap: Step = { kind: "swap", swap: { fromToken: "0x02Fca66C1D1aFB4E2A7884261eB00F63598a7436", toToken: "0x55d398326f99059fF775485246999027B3197955", qty: "0.1", label: "sell NVDAB" } };
+  const lazy: Step = { kind: "lazy", label: "repay with the sale proceeds", build: async () => (order.push("build"), repayUsdt(5n)) };
+  const sim = async (): Promise<Simulation> => (order.push("simulate"), { ok: true, steps: [] });
+  const r = await execute(FROM, [swap, lazy], { signer: bawSigner(FROM, { run: baw.run, waitReceipt: receipt("success"), pollMs: 0 }), simulate: sim });
+  assert.deepEqual(r, { outcome: "done", txHashes: ["0xswap", "0x1", "0x2"], stepsDone: 2 });
+  assert.deepEqual(order, ["build", "simulate"]);
+  assert.equal(baw.cmds()[0], "market-order swap", "built only after the swap");
+});
+
+test("a lazy step that builds nothing is a failure, not a silent success", async () => {
+  const lazy: Step = { kind: "lazy", label: "supply the NVDAB just bought", build: async () => [] };
+  const r = await execute(FROM, [lazy], { signer: bawSigner(FROM, { run: fakeBaw({}).run, waitReceipt: receipt("success") }), simulate: simOk });
+  assert.equal(r.outcome, "failed");
+  assert.match(r.error!, /nothing arrived/);
+});
+
+test("wallet addresses are read defensively from baw output", async () => {
+  const { walletAddresses } = await import("./wallet.ts");
+  const out = ok({ addresses: [{ binanceChainId: "56", address: "0x00000000000000000000000000000000000000Aa" }, { binanceChainId: "CT_501", address: "So1ana111" }] });
+  assert.deepEqual(await walletAddresses(async () => out), ["0x00000000000000000000000000000000000000aa"]);
+  assert.deepEqual(await walletAddresses(async () => JSON.stringify({ success: false })), []);
+});
