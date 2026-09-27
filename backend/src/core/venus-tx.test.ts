@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { encodeFunctionResult } from "viem";
 import { VENUS } from "./config.ts";
-import { abi, callError, pledge, repayUsdt } from "./venus-tx.ts";
+import { abi, callError, pledge, REPAY_ALL, repayUsdt } from "./venus-tx.ts";
 
 test("pledge = approve, mint, enterMarkets, borrow in order", () => {
   const calls = pledge("NVDAB", 10n ** 18n, 50n * 10n ** 18n);
@@ -23,4 +23,12 @@ test("callError checks approve and enterMarkets shapes", () => {
   assert.equal(callError(approve!, encodeFunctionResult({ abi: abi.erc20, functionName: "approve", result: true })), null);
   const enter = pledge("TSLAB", 1n, 1n)[2]!;
   assert.match(callError(enter, encodeFunctionResult({ abi: abi.comptroller, functionName: "enterMarkets", result: [3n] }))!, /code 3/);
+});
+
+test("repay-all approves only what's owed plus a margin, never an unlimited allowance", async () => {
+  const { decodeFunctionData, maxUint256 } = await import("viem");
+  const [approve, repay] = repayUsdt(REPAY_ALL, 101n);
+  assert.deepEqual(decodeFunctionData({ abi: abi.erc20, data: approve!.data }).args, [VENUS.vUSDT, 101n]);
+  assert.deepEqual(decodeFunctionData({ abi: abi.vToken, data: repay!.data }).args, [maxUint256]);
+  assert.throws(() => repayUsdt(REPAY_ALL), /approve cap/);
 });

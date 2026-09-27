@@ -134,10 +134,15 @@ export function decide(s: Snapshot, p: Policy = DEFAULT_POLICY): Decision {
   return out({ kind: "hold" }, "Safe", s.debtUsd > 0 ? `All good: your loan is inside your limits and ${why}.` : `Nothing borrowed yet, and ${why}.`);
 }
 
-/** Extra USDT the user can draw right now without crossing the target. */
+/**
+ * Extra USDT the user can draw right now without crossing the current target.
+ * Stricter `canBorrow` only gates the keeper's automatic raise; the user may draw off-hours up to the
+ * overnight target. Frozen only while the stock is paused or the token drifts > 2% from the stock (PRD F3).
+ */
 export function availableCash(s: Snapshot, profile: RiskProfile): number {
-  const { target, canBorrow } = targetLtv(s, profile);
-  return canBorrow ? Math.max(0, target * s.collateralUsd - s.debtUsd) : 0;
+  const { target } = targetLtv(s, profile);
+  const frozen = s.market === "ASSET_PAUSED" || s.market === "ASSET_LIMITED" || s.spread > 0.02;
+  return frozen ? 0 : Math.max(0, target * s.collateralUsd - s.debtUsd);
 }
 
 const usd$ = (x: number) => `${x.toFixed(2)} USDT`;
