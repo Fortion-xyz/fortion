@@ -1,36 +1,59 @@
-// Guard loop (PRD §5.1 F3): decide → plan → simulate every 60s.
-// Dry run: signing lands with the Agentic Wallet session + fortion-venus-stocks skill (PRD §11, 1–3 Oct).
-import { config, TICKERS } from "../core/config.ts";
-import { plan } from "../core/plan.ts";
-import { getPosition, parseAddress } from "../core/position.ts";
+// Guard loop (PRD §5.1 F3): every 60s, for every watched wallet and stock, run one guard pass.
+// Signing needs all three: EXECUTE=1, this host signed in to the Agentic Wallet (`fortion signin`),
+// and the watched address being that wallet. Anything else runs as a dry run (simulated, logged).
+import { parseAbi, type Address } from "viem";
+import { BSTOCKS, config, TICKERS, USDT } from "../core/config.ts";
+import { db, getPosition, parseAddress } from "../core/position.ts";
 import { simulate } from "../core/simulate.ts";
+import { client } from "../core/venus.ts";
+import { bawSigner, walletAddresses, walletStatus, type Signer } from "../core/wallet.ts";
+import { guardOnce } from "./guard.ts";
 
 const INTERVAL_MS = 60_000;
 const accounts = config.watch.map(parseAddress);
+const EXECUTE = process.env.EXECUTE === "1";
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
 
+const erc20 = parseAbi(["function balanceOf(address) view returns (uint256)"]);
+const balanceOf = (account: Address) => (token: Address) => client.readContract({ address: token, abi: erc20, functionName: "balanceOf", args: [account] });
+
+// Resolved once per tick: is this host allowed to sign for `account`?
+async function signers(): Promise<(a: Address) => Promise<Signer | null>> {
+  if (!EXECUTE) return async () => null;
+  const status = await walletStatus();
+  if (!status.connected) {
+    log("EXECUTE=1 but", status.detail, "Running as dry run.");
+    return async () => null;
+  }
+  const mine = await walletAddresses();
+  return async (a) => (mine.includes(a.toLowerCase()) ? bawSigner(a) : null);
+}
+
 async function tick() {
+  const signerFor = await signers();
   for (const account of accounts)
     for (const ticker of TICKERS) {
       try {
-        const { decision, policy } = await getPosition(account, ticker);
-        if (decision.action.kind === "hold") continue;
-        log(account, ticker, decision.status, decision.reason);
-        const p = plan(decision, policy);
-        if ("blocked" in p) {
-          log("  blocked:", p.blocked);
-          continue;
-        }
-        if (!p.calls.length) continue;
-        const sim = await simulate(account, p.calls);
-        for (const s of sim.steps) log(`  ${s.error ? "✖" : "✔"} ${s.error ?? s.label}`);
-        log(sim.ok ? "  simulated OK, would sign (dry run)" : "  simulation failed, not signing");
+        const e = await guardOnce(account, ticker, {
+          position: getPosition,
+          store: db,
+          signerFor,
+          simulate,
+          balances: async (a, t) => {
+            const [stock, usdt] = await Promise.all([balanceOf(a)(BSTOCKS[t]), balanceOf(a)(USDT)]);
+            return { stock, usdt };
+          },
+          balanceOf,
+          now: () => new Date(),
+        });
+        if (e) log(account, ticker, `[${e.outcome}${e.simulated ? ", simulated" : ""}]`, e.reason, e.error ? `— ${e.error}` : "", e.txHashes.join(" "));
       } catch (err) {
-        console.error(account, ticker, err);
+        console.error(new Date().toISOString(), account, ticker, (err as Error).message);
       }
     }
 }
 
 if (!accounts.length) console.warn("WATCH_ADDRESSES is empty, nothing to guard");
+log(`keeper: ${accounts.length} wallet(s), ${EXECUTE ? "EXECUTE on (signs via baw when signed in)" : "dry run"}`);
 await tick();
 setInterval(tick, INTERVAL_MS);

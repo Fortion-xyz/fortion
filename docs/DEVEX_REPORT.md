@@ -29,6 +29,9 @@ Filled into the official template at the end (PRD §10). Add findings as they ha
 
 - **27 Sep 2026, NVDAB supply cap almost full.** Room fell from ~256 NVDAB (25 Sep) to ~1.2 NVDAB (27 Sep) out of a 1,500 cap. Nothing in the Binance APIs surfaces this; a consumer app must read `Comptroller.supplyCaps` itself or a pledge fails at `mint`.
 
+- **27 Sep 2026, `baw wallet status` on a machine that never signed in** returns `{"success":false,"error":{"code":2,"name":"SERVICE_ERROR","message":"illegal parameter"}}` (baw 1.10.0), not the documented `{"status":"UNCONNECTED"}`. An agent following the docs literally treats that as a service outage instead of "please sign in".
+- **27 Sep 2026, Agentic Wallet preview doesn't catch Venus failures.** Venus vTokens report many failures as a non-zero return code without reverting, so a Binance `contract-call preview` simulation can "succeed" on a call that does nothing. We run our own `eth_simulateV1` + return-code decode before every contract segment.
+
 ## Evidence being collected
 
 `pnpm --filter backend monitor:rwa` (running since 25 Sep 22:47 UTC) logs every `statusInfo` change of all 46 bStocks each minute, plus Venus oracle vs RWA prices every 5 min, to `backend/data/rwa-monitor.jsonl`. Windows to read back:

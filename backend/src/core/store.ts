@@ -15,7 +15,7 @@ export interface GuardEvent {
   usd: number | null;
   status: Status;
   reason: string; // the user-facing sentence
-  outcome: "dry-run" | "done" | "pending-app" | "failed" | "blocked";
+  outcome: "dry-run" | "done" | "pending" | "failed" | "blocked";
   txHashes: string[];
   simulated: boolean;
   error?: string;
