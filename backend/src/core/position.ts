@@ -1,15 +1,14 @@
 // One entry point shared by API, keeper and MCP: live state → policy decision.
 import { getAddress, isAddress, type Address } from "viem";
-import { TICKERS, type Ticker } from "./config.ts";
+import { config, TICKERS, type Ticker } from "./config.ts";
 import { getMarketWindow } from "./market.ts";
-import { availableCash, decide, DEFAULT_POLICY, type Policy, type Snapshot } from "./policy.ts";
+import { availableCash, decide, type Policy, type Snapshot } from "./policy.ts";
+import { openStore } from "./store.ts";
 import { readVenusPosition, usdtBalance } from "./venus.ts";
 
-// ponytail: in-memory, lost on restart. Move to a file/KV once the keeper runs on Agent Studio.
-const policies = new Map<Address, Policy>();
-
-export const getPolicy = (a: Address) => policies.get(a) ?? DEFAULT_POLICY;
-export const setPolicy = (a: Address, p: Partial<Policy>) => policies.set(a, { ...getPolicy(a), ...p }).get(a)!;
+export const db = openStore(config.dataDir);
+export const getPolicy = (a: Address) => db.getPolicy(a);
+export const setPolicy = (a: Address, p: Partial<Policy>) => db.setPolicy(a, p);
 
 export function parseAddress(a: string): Address {
   if (!isAddress(a)) throw new InputError(`Invalid address: ${a}`);

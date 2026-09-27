@@ -5,7 +5,7 @@ import { z } from "zod";
 import { config } from "../core/config.ts";
 import { PROFILES, type RiskProfile } from "../core/policy.ts";
 import { getMarketWindow } from "../core/market.ts";
-import { getPolicy, getPosition, InputError, parseAddress, parseTicker, setPolicy } from "../core/position.ts";
+import { db, getPolicy, getPosition, InputError, parseAddress, parseTicker, setPolicy } from "../core/position.ts";
 
 const policyBody = z.object({
   mode: z.enum(["cash", "accumulate"]).optional(),
@@ -21,6 +21,10 @@ const app = new Hono()
   )
   .get("/profiles", (c) => c.json(PROFILES))
   .get("/policy/:address", (c) => c.json(getPolicy(parseAddress(c.req.param("address")))))
+  .get("/events/:address", (c) => {
+    const limit = Math.min(500, Math.max(1, Number(c.req.query("limit") ?? 50) || 50));
+    return c.json(db.events(parseAddress(c.req.param("address")), limit));
+  })
   .get("/market/:ticker", async (c) => c.json(await getMarketWindow(parseTicker(c.req.param("ticker")))))
   .put("/policy/:address", async (c) => {
     const body = policyBody.safeParse(await c.req.json().catch(() => null));

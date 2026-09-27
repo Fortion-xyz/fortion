@@ -10,6 +10,7 @@ const env = z
     WATCH_ADDRESSES: z.string().default(""),
     // Binance RWA has no earnings date, so the operator supplies them: "NVDAB=2026-11-18T21:00:00Z,TSLAB=…"
     CORPORATE_ACTIONS: z.string().default(""),
+    FORTION_DATA_DIR: z.string().default(new URL("../../data", import.meta.url).pathname),
   })
   .parse(process.env);
 
@@ -19,6 +20,7 @@ export const config = {
   binance: { url: env.BINANCE_WEB3_API_URL, key: env.BINANCE_WEB3_API_KEY, secret: env.BINANCE_WEB3_API_SECRET },
   watch: env.WATCH_ADDRESSES.split(",").map((a) => a.trim()).filter(Boolean),
   corporateActions: parseCorporateActions(env.CORPORATE_ACTIONS),
+  dataDir: env.FORTION_DATA_DIR,
 };
 
 export function parseCorporateActions(raw: string): Record<string, Date[]> {
