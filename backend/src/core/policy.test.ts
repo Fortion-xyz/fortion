@@ -43,7 +43,7 @@ test("stock rise raises credit line", () => {
 test("no borrow when spread > 0.5%, when closed, or when paused", () => {
   for (const o of [{ spread: 0.01 }, { market: "MARKET_CLOSED" as const }, { market: "ASSET_PAUSED" as const }])
     assert.notEqual(at({ collateralUsd: 200, ...o }).action.kind, "borrow");
-  assert.equal(availableCash({ ...base, collateralUsd: 200, spread: 0.01 }, "balanced"), 0);
+  assert.ok(Math.abs(availableCash({ ...base, collateralUsd: 200, spread: 0.01 }, "balanced") - 35) < 1e-9, "manual draws are fine at 1% drift");
 });
 
 test("last resort sells to exactly 40%", () => {
@@ -128,4 +128,14 @@ test("never borrows for a wallet that has no loan yet", () => {
   assert.equal(d.action.kind, "hold");
   assert.match(d.reason, /Nothing borrowed yet/);
   assert.ok(availableCash({ ...base, debtUsd: 0 }, "balanced") > 0, "the user can still draw it themselves");
+});
+
+test("the user can draw off-hours up to the overnight target; only pauses and >2% drift freeze it", () => {
+  const empty = { ...base, debtUsd: 0 };
+  assert.ok(Math.abs(availableCash({ ...empty, market: "MARKET_CLOSED" }, "balanced") - 30) < 1e-9);
+  assert.ok(Math.abs(availableCash({ ...empty, minutesToWeekendClose: 10 }, "balanced") - 30) < 1e-9);
+  assert.ok(Math.abs(availableCash({ ...empty, spread: 0.01 }, "balanced") - 35) < 1e-9);
+  assert.equal(availableCash({ ...empty, market: "ASSET_PAUSED" }, "balanced"), 0);
+  assert.equal(availableCash({ ...empty, spread: 0.03 }, "balanced"), 0);
+  assert.ok(Math.abs(availableCash({ ...empty, hoursToCorporateAction: 5 }, "balanced") - 25) < 1e-9, "before earnings: up to the halt target");
 });

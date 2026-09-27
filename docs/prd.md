@@ -178,8 +178,8 @@ Verified Venus behaviour (25 Sep 2026): borrow is gated by the **collateral fact
 
 ## 8. User flows
 
-**Flow A. Pledge for cash (Dina holds 0.5 NVDAB, needs $50).**
-Open app → "Get cash without selling" → picks Balanced → slider shows "Up to $57 today" (Balanced target 35% of ~$95 collateral) → pick $50 → Agentic Wallet confirms supply + borrow + keeper session in one approval → $50 USDT spendable, $7.50 tagged as Safety buffer, all in her own wallet → Status: Safe. Under two minutes, no DeFi vocabulary.
+**Flow A. Pledge for cash (Dina holds 1 NVDAB ≈ $225, needs $50).**
+Open app → "Get cash without selling" → picks Balanced → slider shows "Up to $66 today" (Balanced target 35% of $225 = $78.75 can be borrowed; 15% of that stays as her Safety buffer, so $66.94 is spendable) → picks $50 → the app borrows $58.82 → one pledge = four wallet transactions (approve, supply, use as collateral, borrow), each previewed by Binance before it is signed → $50 USDT spendable + $8.82 Safety buffer, all in her own wallet → Status: Safe. Off-hours the slider uses the overnight target (30%). *(v3.3: numbers corrected, the v2 example took 35% of $95 as $57.)* Under two minutes, no DeFi vocabulary.
 
 **Flow B. Guard through earnings (automatic).**
 Nvidia earnings Wednesday after close. Tuesday 22:00 WIB the keeper sees the earnings date (operator calendar) is under 24h away → repays from buffer to bring LTV from 35% to 25% → posts "Protecting: earnings tomorrow, loan reduced by $12, no shares sold." Thursday token resumes, price +6% → keeper restores LTV to 35% → "Credit line raised by $18, available to draw." Dina never opened the app.

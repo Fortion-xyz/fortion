@@ -35,10 +35,15 @@ export function supply(ticker: Ticker, amount: bigint): Call[] {
 export const borrowUsdt = (amount: bigint): Call =>
   call(VENUS.vUSDT, "borrow USDT", encodeFunctionData({ abi: abi.vToken, functionName: "borrow", args: [amount] }));
 
-/** Pass maxUint256 to repay the full debt including interest accrued until the tx lands. */
-export function repayUsdt(amount: bigint): Call[] {
+/**
+ * Repay `amount` USDT. For REPAY_ALL (full debt incl. interest accrued until the tx lands) pass
+ * `approveCap`: the debt plus a small margin. Never approve an unlimited allowance.
+ */
+export function repayUsdt(amount: bigint, approveCap?: bigint): Call[] {
+  if (amount === REPAY_ALL && approveCap === undefined) throw new Error("repayUsdt(REPAY_ALL) needs an approve cap");
+  const allowance = amount === REPAY_ALL ? approveCap! : amount;
   return [
-    call(USDT, "approve USDT", encodeFunctionData({ abi: abi.erc20, functionName: "approve", args: [VENUS.vUSDT, amount] })),
+    call(USDT, "approve USDT", encodeFunctionData({ abi: abi.erc20, functionName: "approve", args: [VENUS.vUSDT, allowance] })),
     call(VENUS.vUSDT, "repay USDT", encodeFunctionData({ abi: abi.vToken, functionName: "repayBorrow", args: [amount] })),
   ];
 }

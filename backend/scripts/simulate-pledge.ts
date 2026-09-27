@@ -54,7 +54,7 @@ const state = (when: string) => [
 const calls: Step[] = [
   ...pledge(ticker, amount, borrow),
   ...state("after pledge"),
-  ...repayUsdt(REPAY_ALL),
+  ...repayUsdt(REPAY_ALL, (borrow * 1001n) / 1000n + 10n ** 16n), // debt + 0.1% + 0.01 for interest
   withdraw(ticker, (amount * 999n) / 1000n), // ponytail: 0.1% left for vToken exchange-rate rounding
   ...state("after repay + withdraw"),
 ];
