@@ -27,7 +27,7 @@ export interface MarketWindow {
   onchainUsd: number;
   referenceUsd: number; // per-share price implied by the token (RWA), not an exchange quote
   stockUsd: number | null; // real last sale on the exchange (Nasdaq); null if unavailable
-  spread: number; // |referenceUsd − stockUsd| / stockUsd, or the RWA pair when stockUsd is null
+  spread: number; // |referenceUsd − stockUsd| / stockUsd; Infinity when no fresh stock quote
   hoursToCorporateAction: number | null; // from confirmed dates only
   nextEarnings: Earnings | null; // may be an estimate; shown to the user, not acted on
   minutesToWeekendClose: number | null;
@@ -63,9 +63,9 @@ export function toMarketWindow(ticker: Ticker, price: RwaPrice, status: StatusIn
     onchainUsd,
     referenceUsd,
     stockUsd: stock?.priceUsd ?? null,
-    spread: stock
-      ? Math.abs(referenceUsd - stock.priceUsd) / stock.priceUsd
-      : referenceUsd > 0 ? Math.abs(onchainUsd - referenceUsd) / referenceUsd : 1,
+    // Unknown without a real quote: the RWA pair is derived from the token itself and always looks
+    // tight, which would silently switch off the drift rule exactly when it matters (Important #5).
+    spread: stock ? Math.abs(referenceUsd - stock.priceUsd) / stock.priceUsd : Infinity,
     hoursToCorporateAction: next ? (+next.at - +now) / 3.6e6 : null,
     nextEarnings: upcoming[0] ?? null,
     minutesToWeekendClose: minutesToWeekendClose(now),

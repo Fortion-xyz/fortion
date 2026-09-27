@@ -2,7 +2,7 @@
 // Needed because Binance RWA `referencePrice` is derived from the token price itself
 // (= tokenPrice / tokenToShareRatio, verified by the RWA monitor 25–27 Sep), so it can't
 // show a weekend gap between the token and the stock.
-// ponytail: unofficial endpoint, no SLA; on failure the spread falls back to the RWA pair.
+// ponytail: unofficial endpoint, no SLA. Without a fresh quote the spread is unknown and new borrowing freezes.
 import { UNDERLYING, type Ticker } from "./config.ts";
 
 export interface StockQuote {
@@ -19,6 +19,12 @@ export function parseNasdaqQuote(json: unknown): StockQuote | null {
 }
 
 const TTL_MS = 60_000;
+const MAX_AGE_MS = 15 * 60_000; // never decide on a stock price older than this
+
+/** A cached quote, or null once it is older than 15 minutes (review Important #5). */
+export function freshQuote(hit: { at: number; value: StockQuote | null } | undefined, now: number): StockQuote | null {
+  return hit && now - hit.at <= MAX_AGE_MS ? hit.value : null;
+}
 const cache = new Map<Ticker, { at: number; value: StockQuote | null }>();
 
 export async function lastStockPrice(ticker: Ticker): Promise<StockQuote | null> {
@@ -34,6 +40,6 @@ export async function lastStockPrice(ticker: Ticker): Promise<StockQuote | null>
     return value;
   } catch (err) {
     console.warn(`quote: nasdaq ${ticker} failed:`, (err as Error).message);
-    return hit?.value ?? null;
+    return freshQuote(hit, Date.now());
   }
 }

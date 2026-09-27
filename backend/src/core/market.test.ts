@@ -38,9 +38,9 @@ test("regular session: weekdays 09:30–16:00 New York only", () => {
   assert.equal(isRegularSession(new Date("2026-09-26T15:00:00Z")), false); // Saturday
 });
 
-test("spread from on-chain vs reference; zero reference never reads as tight", () => {
-  assert.ok(Math.abs(toMarketWindow("NVDAB", price("102", "100"), status({}), REGULAR).spread - 0.02) < 1e-9);
-  assert.equal(toMarketWindow("NVDAB", price("1", "0"), status({}), REGULAR).spread, 1);
+test("no real stock quote: spread is unknown (Infinity), never a tight-looking RWA pair", () => {
+  assert.equal(toMarketWindow("NVDAB", price("102", "100"), status({}), REGULAR).spread, Infinity);
+  assert.equal(toMarketWindow("NVDAB", price("1", "0"), status({}), REGULAR).spread, Infinity);
 });
 
 test("only confirmed dates drive the Guard; estimates are info only", () => {
