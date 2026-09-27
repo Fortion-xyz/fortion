@@ -23,11 +23,14 @@ Filled into the official template at the end (PRD §10). Add findings as they ha
 - **25 Sep 2026, earnings dates had to come from outside Binance.** Nasdaq's keyless `api/analyst/{ticker}/earnings-date` separates company-scheduled (`expected*`) from algorithmic (`estimated`) dates in free text only, so we parse `reportText`. Third-party calendars disagreed with each other for all three stocks (e.g. TSLA 21 vs 28 Oct), and none of NVDA / TSLA / SPCX was company-confirmed yet.
 - **25 Sep 2026, SPCX is a listed stock and NVDA dividends accrue into the token.** `/underlying-profile`: SPCXB `assetType` 1 (listed SpaceX shares, not pre-IPO); NVDAB `tokenToShareRatio` 1.000778 with `latestDividend` 0.25, so ex-dividend dates are corporate actions too, not only earnings.
 
+- **27 Sep 2026 (monitor, 25 Sep 22:47 → 27 Sep), RWA status never changes.** Zero `statusInfo` changes across all 46 bStocks through Friday close, the weekend, and the 26 Sep 10:50–14:00 UTC partner-broker maintenance (42 polls inside that window, no errors). `reasonCode` stays `TRADING`, `marketStatus` null. For a lender this field currently carries no signal outside real halts.
+- **27 Sep 2026 (monitor), `referencePrice` is derived from the token price.** Every sample satisfies `referencePrice = tokenPrice / tokenToShareRatio` (NVDAB 224.99 / 1.000778 = 224.815; TSLAB/SPCXB ratio 1 → equal). The name suggests an exchange quote; it isn't one, so it can't reveal a weekend gap. We added the Nasdaq last sale as the real reference.
+- **27 Sep 2026 (monitor), the Venus oracle is live on weekends.** NVDAB oracle moved 224.30–225.26 on Saturday, tracking the on-chain price within ~0.1%. No freeze, no Dynamic Protection trigger observed. The gap risk is token vs stock, not a frozen oracle.
+
 ## Evidence being collected
 
 `pnpm --filter backend monitor:rwa` (running since 25 Sep 22:47 UTC) logs every `statusInfo` change of all 46 bStocks each minute, plus Venus oracle vs RWA prices every 5 min, to `backend/data/rwa-monitor.jsonl`. Windows to read back:
-- Binance stock maintenance, 26 Sep 10:50–14:00 UTC: which `reasonCode` appears, and does the Venus oracle keep moving?
-- Weekend 26–28 Sep: oracle vs reference price while the stock market is closed (PRD §10.3).
+- ~~Binance stock maintenance, 26 Sep~~ and ~~weekend~~: done, see findings above.
 - Micron (MUB) earnings, 30 Sep after close: when `ASSET_LIMITED` / `ASSET_PAUSED` starts and ends relative to the release.
 
 ## To verify (PRD §10)
