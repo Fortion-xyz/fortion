@@ -2,7 +2,7 @@
 // Nasdaq's keyless earnings-date endpoint plus operator overrides (CORPORATE_ACTIONS).
 // ponytail: unofficial endpoint (Zacks data via api.nasdaq.com), no SLA. If it breaks, the operator
 // calendar still works and RWA ASSET_PAUSED / ASSET_LIMITED still catch the halt itself.
-import { config, type Ticker } from "./config.ts";
+import { config, UNDERLYING, type Ticker } from "./config.ts";
 
 export interface Earnings {
   at: Date;
@@ -10,8 +10,6 @@ export interface Earnings {
   confirmed: boolean;
   source: "nasdaq" | "operator";
 }
-
-const UNDERLYING: Record<Ticker, string> = { NVDAB: "NVDA", TSLAB: "TSLA", SPCXB: "SPCX" };
 
 /** Wall-clock time in New York → UTC Date (DST-aware, no tz library). */
 export function nyTime(y: number, m: number, d: number, hh: number, mm: number): Date {

@@ -41,6 +41,9 @@ export const BSTOCKS = {
   SPCXB: "0xbe9D156892E55e7154BcD3cB0FEA677F9D3103E1",
 } as const;
 
+/** Underlying US ticker per bStock, for off-chain data (Nasdaq quote + earnings calendar). */
+export const UNDERLYING = { NVDAB: "NVDA", TSLAB: "TSLA", SPCXB: "SPCX" } as const;
+
 export const VENUS = {
   comptroller: "0xfD36E2c2a6789Db23113685031d7F16329158384",
   vUSDT: "0xfD5840Cd36d94D7229439859C0112a4185BC0255",

@@ -22,7 +22,7 @@ test("holds at normal target", () => {
 test("earnings within 24h repays down to 25% from buffer", () => {
   const d = at({ hoursToCorporateAction: 20 });
   assert.deepEqual(d.action, { kind: "repay", usd: 10 }); // needs 10, buffer has 10
-  assert.match(d.reason, /corporate action/);
+  assert.match(d.reason, /earnings or a corporate action/);
 });
 
 test("repay is capped by buffer", () => {
@@ -91,4 +91,41 @@ test("every profile stays inside Venus limits for all live markets", () => {
       assert.ok(t.halt < t.overnight && t.overnight < t.normal && t.normal < t.protect && t.protect < t.lastResort);
       assert.ok(t.afterSell < t.protect, `${p} selling must land below the protect line`);
     }
+});
+
+// PRD §3: users never see LTV, percentages of their loan, or lender jargon (#19).
+const JARGON = /\d+(\.\d+)?%|LTV|collateral|liquidat|health factor|vToken|threshold/i;
+const scenarios: [string, Partial<Snapshot>, Partial<typeof DEFAULT_POLICY>?][] = [
+  ["hold, market open", {}],
+  ["hold, market closed", { market: "MARKET_CLOSED", debtUsd: 25 }],
+  ["repay before earnings", { hoursToCorporateAction: 20 }],
+  ["repay, paused", { market: "ASSET_PAUSED" }],
+  ["repay, price drift", { spread: 0.03 }],
+  ["repay, weekend close", { minutesToWeekendClose: 10 }],
+  ["borrow, stock rose", { collateralUsd: 120 }],
+  ["borrow, accumulate", { collateralUsd: 120 }, { mode: "accumulate" }],
+  ["sell, buffer empty", { debtUsd: 60, bufferUsd: 0 }],
+  ["notify, selling off", { debtUsd: 60, bufferUsd: 0 }, { keeperCanSell: false }],
+  ["notify, paused and empty", { debtUsd: 60, bufferUsd: 0, market: "ASSET_PAUSED" }],
+  ["notify, buffer too small", { debtUsd: 52, bufferUsd: 0.5 }],
+];
+
+test("every Guard sentence is plain language", () => {
+  for (const [name, snap, pol] of scenarios) {
+    const { reason } = decide({ ...base, ...snap }, { ...DEFAULT_POLICY, ...pol });
+    assert.doesNotMatch(reason, JARGON, `${name}: "${reason}"`);
+    assert.ok(reason.length > 20 && /[.!]$/.test(reason), `${name}: full sentence expected, got "${reason}"`);
+  }
+});
+
+test("sentences name the cause and the money moved", () => {
+  assert.match(decide({ ...base, hoursToCorporateAction: 20 }).reason, /earnings.*20 hours/i);
+  assert.match(decide({ ...base, collateralUsd: 120 }).reason, /7\.00 USDT/);
+});
+
+test("never borrows for a wallet that has no loan yet", () => {
+  const d = decide({ ...base, debtUsd: 0 });
+  assert.equal(d.action.kind, "hold");
+  assert.match(d.reason, /Nothing borrowed yet/);
+  assert.ok(availableCash({ ...base, debtUsd: 0 }, "balanced") > 0, "the user can still draw it themselves");
 });
