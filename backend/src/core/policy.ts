@@ -74,21 +74,21 @@ export function ltvOf(s: Pick<Snapshot, "collateralUsd" | "debtUsd">): number {
 export function targetLtv(s: Snapshot, profile: RiskProfile): { target: number; canBorrow: boolean; why: string } {
   const t = thresholds(profile, s.liquidationThreshold);
   if (s.market === "ASSET_PAUSED" || s.market === "ASSET_LIMITED")
-    return { target: t.halt, canBorrow: false, why: "the token is paused" };
+    return { target: t.halt, canBorrow: false, why: "the stock is paused for a corporate action" };
   if (s.hoursToCorporateAction !== null && s.hoursToCorporateAction <= 24)
     return {
       target: t.halt,
       canBorrow: false,
-      why: `a corporate action is in ${Math.round(s.hoursToCorporateAction)} hours and the token will be paused`,
+      why: `earnings or a corporate action is ${Math.round(s.hoursToCorporateAction)} hours away and trading will pause`,
     };
   if (s.spread > 0.02)
-    return { target: t.overnight, canBorrow: false, why: "on-chain price is more than 2% off the reference" };
+    return { target: t.overnight, canBorrow: false, why: "the token price has drifted away from the real stock price" };
   if (s.market === "MARKET_CLOSED")
     return { target: t.overnight, canBorrow: false, why: "the stock market is closed" };
   if (s.minutesToWeekendClose !== null && s.minutesToWeekendClose <= 30)
-    return { target: t.overnight, canBorrow: false, why: "the market closes for the weekend soon" };
+    return { target: t.overnight, canBorrow: false, why: "the stock market closes for the weekend soon" };
   // ponytail: PRD only defines ≤0.5% as "normal"; 0.5–2% keeps the normal target but blocks new borrows.
-  return { target: t.normal, canBorrow: s.spread <= 0.005, why: "regular trading session" };
+  return { target: t.normal, canBorrow: s.spread <= 0.005, why: "the stock market is open" };
 }
 
 export function decide(s: Snapshot, p: Policy = DEFAULT_POLICY): Decision {
@@ -109,28 +109,29 @@ export function decide(s: Snapshot, p: Policy = DEFAULT_POLICY): Decision {
   // Buffer is spent first; only once it is empty does the last-resort sell kick in.
   if (ltv >= t.lastResort && s.bufferUsd < MIN_ACTION_USD) {
     if (!p.keeperCanSell || halted)
-      return out({ kind: "notify" }, "Protecting", `Loan at ${pct(ltv)}, buffer empty and ${halted ? "the token is paused" : "selling is turned off"}. Add USDT or repay now.`);
+      return out({ kind: "notify" }, "Protecting", `Your loan needs attention: the safety buffer is empty and ${halted ? "the stock is paused, so nothing can be sold" : "automatic selling is turned off"}. Add USDT or repay now.`);
     // Sell X of collateral and repay X: (D − X) / (C − X) = afterSell.
     const usd = (s.debtUsd - t.afterSell * s.collateralUsd) / (1 - t.afterSell);
-    return out({ kind: "sell", usd }, "Protecting", `Sold ${usd$(usd)} of stock to bring the loan from ${pct(ltv)} to ${pct(t.afterSell)}; a Venus liquidation would sell more with a 10% penalty.`);
+    return out({ kind: "sell", usd }, "Protecting", `Sold ${usd$(usd)} of stock to keep your loan safe, only what was needed. A forced sale by the lender would have sold more, with a penalty.`);
   }
 
   if (ltv >= t.protect || ltv > target) {
     const usd = Math.min(repayToTarget, s.bufferUsd);
     if (usd >= MIN_ACTION_USD)
       return out({ kind: "repay", usd }, "Protecting", `Repaid ${usd$(usd)} from the safety buffer because ${why}.`);
-    return out({ kind: "notify" }, ltv >= t.protect ? "Protecting" : "Careful", `Loan at ${pct(ltv)} is above the ${pct(target)} target and the buffer cannot cover it. Add USDT or repay.`);
+    return out({ kind: "notify" }, ltv >= t.protect ? "Protecting" : "Careful", `Your loan is above your limit because ${why}, and the safety buffer can't cover it. Add USDT or repay.`);
   }
 
-  if (canBorrow && ltv < target - RAISE_GAP) {
+  // Only an existing loan grows by itself; a fresh pledge waits for the user to draw.
+  if (canBorrow && s.debtUsd > 0 && ltv < target - RAISE_GAP) {
     const usd = target * s.collateralUsd - s.debtUsd;
     if (usd >= MIN_ACTION_USD) {
-      const where = p.mode === "cash" ? "available to draw" : "used to buy more stock";
-      return out({ kind: "borrow", usd }, "Safe", `Credit line raised by ${usd$(usd)}, ${where}, because the stock rose.`);
+      const where = p.mode === "cash" ? "ready to draw" : "going into more of the same stock";
+      return out({ kind: "borrow", usd }, "Safe", `Your credit line grew by ${usd$(usd)} because the stock rose. It's ${where}.`);
     }
   }
 
-  return out({ kind: "hold" }, "Safe", `Holding at ${pct(ltv)}; target is ${pct(target)} because ${why}.`);
+  return out({ kind: "hold" }, "Safe", s.debtUsd > 0 ? `All good: your loan is inside your limits and ${why}.` : `Nothing borrowed yet, and ${why}.`);
 }
 
 /** Extra USDT the user can draw right now without crossing the target. */
@@ -139,5 +140,4 @@ export function availableCash(s: Snapshot, profile: RiskProfile): number {
   return canBorrow ? Math.max(0, target * s.collateralUsd - s.debtUsd) : 0;
 }
 
-const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
 const usd$ = (x: number) => `${x.toFixed(2)} USDT`;
