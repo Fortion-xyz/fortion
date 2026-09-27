@@ -32,6 +32,9 @@ Filled into the official template at the end (PRD §10). Add findings as they ha
 - **27 Sep 2026, `baw wallet status` on a machine that never signed in** returns `{"success":false,"error":{"code":2,"name":"SERVICE_ERROR","message":"illegal parameter"}}` (baw 1.10.0), not the documented `{"status":"UNCONNECTED"}`. An agent following the docs literally treats that as a service outage instead of "please sign in".
 - **27 Sep 2026, Agentic Wallet preview doesn't catch Venus failures.** Venus vTokens report many failures as a non-zero return code without reverting, so a Binance `contract-call preview` simulation can "succeed" on a call that does nothing. We run our own `eth_simulateV1` + return-code decode before every contract segment.
 
+- **27 Sep 2026, Agent Studio is a seller runtime, not a keeper runtime.** `bag init` scaffolds a paid-service Agent (ERC-8183 jobs, x402/MPP) with its own wallet; there is no scheduler and no path to a user's Binance Agentic Wallet. Two hackathon products (Agent Studio, Agentic Wallet) have to be bridged by the builder. Pleasant surprise: a FREE x402 face (`price_usd = "0"`) is an anonymous passthrough, ideal for a free public service.
+- **27 Sep 2026, `bag dev --port` still binds the secondary contract port 9000.** With another `bag dev` already on 9000, `--port 9100` serves on 9100 but logs `secondary contract port 9000 unavailable`, and a quick `curl localhost:9000` hits the *other* agent. Easy to test the wrong agent.
+
 ## Evidence being collected
 
 `pnpm --filter backend monitor:rwa` (running since 25 Sep 22:47 UTC) logs every `statusInfo` change of all 46 bStocks each minute, plus Venus oracle vs RWA prices every 5 min, to `backend/data/rwa-monitor.jsonl`. Windows to read back:

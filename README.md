@@ -15,6 +15,7 @@ backend/
   scripts/           one-off on-chain checks + RWA monitor
 skills/
   fortion-venus-stocks/  Binance Wallet Skill (Venus borrow/repay for bStocks), zero-dependency
+fortionguard/        BNB Agent Studio agent (ERC-8004 identity, A2A + x402 risk-report service)
 docs/                PRD, DevEx report, plans
 ```
 
