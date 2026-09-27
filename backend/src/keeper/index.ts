@@ -8,6 +8,7 @@ import { simulate } from "../core/simulate.ts";
 import { client } from "../core/venus.ts";
 import { resolveSigner, type Signer } from "../core/wallet.ts";
 import { guardOnce } from "./guard.ts";
+import { runEvery } from "./loop.ts";
 
 const INTERVAL_MS = 60_000;
 const accounts = config.watch.map(parseAddress);
@@ -57,5 +58,4 @@ async function tick() {
 
 if (!accounts.length) console.warn("WATCH_ADDRESSES is empty, nothing to guard");
 log(`keeper: ${accounts.length} wallet(s), ${EXECUTE ? "EXECUTE on (signs via baw when signed in)" : "dry run"}`);
-await tick();
-setInterval(tick, INTERVAL_MS);
+await runEvery(tick, INTERVAL_MS);
