@@ -24,6 +24,15 @@ export function parseTicker(t: string | undefined): Ticker {
 
 export class InputError extends Error {}
 
+/**
+ * Shadow oracle (PRD §13): value collateral at the lower of the Venus oracle (≈ token price) and the
+ * real stock price. The token's implied per-share price is `referenceUsd`, so the haircut is stock / reference.
+ */
+export function conservativeCollateral(venusUsd: number, m: { referenceUsd: number; stockUsd: number | null }): number {
+  if (m.stockUsd === null || m.referenceUsd <= 0) return venusUsd;
+  return venusUsd * Math.min(1, m.stockUsd / m.referenceUsd);
+}
+
 export async function getPosition(account: Address, ticker: Ticker) {
   const policy = getPolicy(account);
   const [venus, usdt, market] = await Promise.all([
@@ -31,8 +40,7 @@ export async function getPosition(account: Address, ticker: Ticker) {
     usdtBalance(account),
     getMarketWindow(ticker),
   ]);
-  // Shadow oracle (PRD §13): value collateral at the lower of Venus oracle and RWA reference.
-  const collateralUsd = venus.collateralUsd * Math.min(1, market.referenceUsd / market.onchainUsd);
+  const collateralUsd = conservativeCollateral(venus.collateralUsd, market);
   // ponytail: buffer = the tagged 15% of debt, capped by what is actually in the wallet.
   const bufferUsd = Math.min(usdt, (venus.debtUsd * policy.bufferBps) / 10_000);
   const snapshot: Snapshot = {

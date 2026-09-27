@@ -4,6 +4,7 @@
 // marketStatus is null, so the regular session comes from the clock, not the API.
 import { binanceGet } from "./binance.ts";
 import { upcomingEarnings, type Earnings } from "./calendar.ts";
+import { lastStockPrice, type StockQuote } from "./quote.ts";
 import { BSTOCKS, type Ticker } from "./config.ts";
 import type { MarketStatus } from "./policy.ts";
 
@@ -24,8 +25,9 @@ export interface MarketWindow {
   regularSession: boolean;
   reason: string | null;
   onchainUsd: number;
-  referenceUsd: number;
-  spread: number;
+  referenceUsd: number; // per-share price implied by the token (RWA), not an exchange quote
+  stockUsd: number | null; // real last sale on the exchange (Nasdaq); null if unavailable
+  spread: number; // |referenceUsd − stockUsd| / stockUsd, or the RWA pair when stockUsd is null
   hoursToCorporateAction: number | null; // from confirmed dates only
   nextEarnings: Earnings | null; // may be an estimate; shown to the user, not acted on
   minutesToWeekendClose: number | null;
@@ -47,7 +49,7 @@ export function toMarketStatus(s: StatusInfo, regularSession: boolean): MarketSt
   }
 }
 
-export function toMarketWindow(ticker: Ticker, price: RwaPrice, status: StatusInfo, now: Date, earnings: Earnings[] = []): MarketWindow {
+export function toMarketWindow(ticker: Ticker, price: RwaPrice, status: StatusInfo, now: Date, earnings: Earnings[] = [], stock: StockQuote | null = null): MarketWindow {
   const onchainUsd = Number(price.tokenPrice);
   const referenceUsd = Number(price.referencePrice);
   const regularSession = isRegularSession(now);
@@ -60,7 +62,10 @@ export function toMarketWindow(ticker: Ticker, price: RwaPrice, status: StatusIn
     reason: status.reasonMsg,
     onchainUsd,
     referenceUsd,
-    spread: referenceUsd > 0 ? Math.abs(onchainUsd - referenceUsd) / referenceUsd : 1,
+    stockUsd: stock?.priceUsd ?? null,
+    spread: stock
+      ? Math.abs(referenceUsd - stock.priceUsd) / stock.priceUsd
+      : referenceUsd > 0 ? Math.abs(onchainUsd - referenceUsd) / referenceUsd : 1,
     hoursToCorporateAction: next ? (+next.at - +now) / 3.6e6 : null,
     nextEarnings: upcoming[0] ?? null,
     minutesToWeekendClose: minutesToWeekendClose(now),
@@ -90,8 +95,8 @@ function fetchRaw(ticker: Ticker) {
 }
 
 export async function getMarketWindow(ticker: Ticker, now = new Date()): Promise<MarketWindow> {
-  const [{ price, statusInfo }, earnings] = await Promise.all([fetchRaw(ticker), upcomingEarnings(ticker, now)]);
-  return toMarketWindow(ticker, price, statusInfo, now, earnings);
+  const [{ price, statusInfo }, earnings, stock] = await Promise.all([fetchRaw(ticker), upcomingEarnings(ticker, now), lastStockPrice(ticker)]);
+  return toMarketWindow(ticker, price, statusInfo, now, earnings, stock);
 }
 
 function nyClock(now: Date) {
