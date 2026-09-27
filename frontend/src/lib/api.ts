@@ -30,5 +30,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 export const getPosition = (address: string, ticker = "NVDAB") => api<Position>(`/position/${address}?ticker=${ticker}`);
 export const getProfiles = () => api<Record<RiskProfile, Thresholds>>("/profiles");
 export const getPolicy = (address: string) => api<Policy>(`/policy/${address}`);
+// Server-only (called from a Server Action): the operator token never reaches the browser.
 export const setProfile = (address: string, profile: RiskProfile) =>
-  api<Policy>(`/policy/${address}`, { method: "PUT", body: JSON.stringify({ profile }) });
+  api<Policy>(`/policy/${address}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", authorization: `Bearer ${process.env.API_TOKEN ?? ""}` },
+    body: JSON.stringify({ profile }),
+  });
