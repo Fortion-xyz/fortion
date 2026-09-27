@@ -11,8 +11,11 @@ backend/
   src/api/           HTTP API (Hono) for the frontend
   src/keeper/        Guard loop (runs on BNB Agent Studio)
   src/mcp/           MCP server for Claude / any MCP client
-  scripts/           one-off on-chain checks
-docs/                PRD, DevEx report
+  src/cli/           `fortion` CLI (status, pledge, draw, repay, withdraw, signin, calldata)
+  scripts/           one-off on-chain checks + RWA monitor
+skills/
+  fortion-venus-stocks/  Binance Wallet Skill (Venus borrow/repay for bStocks), zero-dependency
+docs/                PRD, DevEx report, plans
 ```
 
 ## Run
