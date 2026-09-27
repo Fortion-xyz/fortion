@@ -7,6 +7,7 @@ import { PROFILES, type RiskProfile } from "../core/policy.ts";
 import { getMarketWindow } from "../core/market.ts";
 import { previewDraw, previewPledge, previewRepay } from "../core/preview.ts";
 import { listStocks } from "../core/stocks.ts";
+import { explain } from "../core/explain.ts";
 import { db, getPolicy, getPosition, InputError, parseAddress, parseTicker, setPolicy } from "../core/position.ts";
 
 const policyBody = z.object({
@@ -51,6 +52,9 @@ const app = new Hono()
     const limit = Math.min(500, Math.max(1, Number(c.req.query("limit") ?? 50) || 50));
     return c.json(db.events(parseAddress(c.req.param("address")), limit));
   })
+  .get("/explain/:address", async (c) =>
+    c.text(explain(await getPosition(parseAddress(c.req.param("address")), parseTicker(c.req.query("ticker"))))),
+  )
   .get("/market/:ticker", async (c) => c.json(await getMarketWindow(parseTicker(c.req.param("ticker")))))
   .put("/policy/:address", async (c) => {
     const body = policyBody.safeParse(await c.req.json().catch(() => null));
