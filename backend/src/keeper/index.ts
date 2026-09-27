@@ -6,7 +6,7 @@ import { BSTOCKS, config, TICKERS, USDT } from "../core/config.ts";
 import { db, getPosition, parseAddress } from "../core/position.ts";
 import { simulate } from "../core/simulate.ts";
 import { client } from "../core/venus.ts";
-import { bawSigner, walletAddresses, walletStatus, type Signer } from "../core/wallet.ts";
+import { resolveSigner, type Signer } from "../core/wallet.ts";
 import { guardOnce } from "./guard.ts";
 
 const INTERVAL_MS = 60_000;
@@ -19,14 +19,16 @@ const balanceOf = (account: Address) => (token: Address) => client.readContract(
 
 // Resolved once per tick: is this host allowed to sign for `account`?
 async function signers(): Promise<(a: Address) => Promise<Signer | null>> {
-  if (!EXECUTE) return async () => null;
-  const status = await walletStatus();
-  if (!status.connected) {
-    log("EXECUTE=1 but", status.detail, "Running as dry run.");
-    return async () => null;
-  }
-  const mine = await walletAddresses();
-  return async (a) => (mine.includes(a.toLowerCase()) ? bawSigner(a) : null);
+  const cache = new Map<string, Signer | null>();
+  let warned = false;
+  return async (a) => {
+    if (!cache.has(a)) {
+      const { signer, why } = await resolveSigner(a, EXECUTE);
+      if (!signer && EXECUTE && !warned) (warned = true), log("dry run:", why);
+      cache.set(a, signer);
+    }
+    return cache.get(a)!;
+  };
 }
 
 async function tick() {

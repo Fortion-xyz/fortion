@@ -154,3 +154,12 @@ test("wallet addresses are read defensively from baw output", async () => {
   assert.deepEqual(await walletAddresses(async () => out), ["0x00000000000000000000000000000000000000aa"]);
   assert.deepEqual(await walletAddresses(async () => JSON.stringify({ success: false })), []);
 });
+
+test("resolveSigner: only with EXECUTE, a signed-in host, and the right wallet", async () => {
+  const { resolveSigner } = await import("./wallet.ts");
+  const host = (status: string, addr: string): Run => async (args) => (args[1] === "status" ? ok({ status }) : ok({ address: addr }));
+  assert.equal((await resolveSigner(FROM, false, host("CONNECTED", FROM))).signer, null);
+  assert.match((await resolveSigner(FROM, true, host("UNCONNECTED", FROM))).why!, /Not signed in/);
+  assert.match((await resolveSigner(FROM, true, host("CONNECTED", "0x00000000000000000000000000000000000000BB"))).why!, /not the Agentic Wallet/);
+  assert.equal((await resolveSigner(FROM, true, host("CONNECTED", FROM))).signer?.from, FROM);
+});
