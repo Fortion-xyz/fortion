@@ -33,9 +33,9 @@ export type Run = (args: string[]) => Promise<string>;
 const LOCAL_BAW = new URL("../../node_modules/.bin/baw", import.meta.url).pathname;
 const BAW = existsSync(LOCAL_BAW) ? LOCAL_BAW : "baw";
 
-export const runBaw: Run = (args) =>
+export const runBaw = (args: string[], timeoutMs = 120_000): Promise<string> =>
   new Promise((resolve, reject) =>
-    execFile(BAW, args, { timeout: 120_000, maxBuffer: 4 << 20 }, (err, stdout, stderr) => {
+    execFile(BAW, args, { timeout: timeoutMs, maxBuffer: 4 << 20 }, (err, stdout, stderr) => {
       if (err && (err as NodeJS.ErrnoException).code === "ENOENT")
         return reject(new Error("baw CLI not found: npm install -g @binance/agentic-wallet@1.10.0"));
       // baw prints its JSON result on stdout even when it exits non-zero.
@@ -131,4 +131,17 @@ export async function walletAddresses(run: Run = runBaw): Promise<string[]> {
   const out = await run(["wallet", "address", "--json"]).catch(() => "");
   if (!parseBaw(out).success) return [];
   return [...new Set((out.match(/0x[0-9a-fA-F]{40}/g) ?? []).map((a) => a.toLowerCase()))];
+}
+
+/**
+ * Signer for `account`, or null (dry run) with the reason. Signing needs EXECUTE=1, a signed-in host,
+ * and `account` being the signed-in wallet. Shared by the keeper, the CLI and MCP.
+ */
+export async function resolveSigner(account: Address, execute = process.env.EXECUTE === "1", run: Run = runBaw): Promise<{ signer: Signer | null; why?: string }> {
+  if (!execute) return { signer: null, why: "EXECUTE=1 is not set, so nothing is signed (preview only)." };
+  const status = await walletStatus(run);
+  if (!status.connected) return { signer: null, why: status.detail };
+  const mine = await walletAddresses(run);
+  if (!mine.includes(account.toLowerCase())) return { signer: null, why: `${account} is not the Agentic Wallet signed in on this host (${mine.join(", ") || "none"}).` };
+  return { signer: bawSigner(account, { run }) };
 }

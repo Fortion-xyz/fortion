@@ -29,7 +29,7 @@ const usdt = (x: number) => parseUnits(x.toFixed(6), 18);
 
 async function withSimulation<T extends object>(account: Address, calls: Call[], body: T) {
   const simulation: Simulation = calls.length ? await simulate(account, calls) : { ok: true, steps: [] };
-  return { ...body, steps: calls.map((c) => c.label), simulation };
+  return { ...body, steps: calls.map((c) => c.label), calls, simulation };
 }
 
 /** Pledge `amount` bStock (decimal string, e.g. "0.5") and optionally draw `cash` spendable USDT. */

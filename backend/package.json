@@ -2,9 +2,6 @@
   "name": "backend",
   "private": true,
   "type": "module",
-  "bin": {
-    "fortion-mcp": "./dist/mcp/index.js"
-  },
   "scripts": {
     "dev:api": "tsx watch --env-file-if-exists=.env src/api/server.ts",
     "dev:keeper": "tsx watch --env-file-if-exists=.env src/keeper/index.ts",
@@ -15,7 +12,8 @@
     "check:venus": "tsx --env-file-if-exists=.env scripts/venus-check.ts",
     "simulate:pledge": "tsx --env-file-if-exists=.env scripts/simulate-pledge.ts",
     "check:rwa": "tsx --env-file-if-exists=.env scripts/rwa-check.ts",
-    "monitor:rwa": "tsx --env-file-if-exists=.env scripts/rwa-monitor.ts"
+    "monitor:rwa": "tsx --env-file-if-exists=.env scripts/rwa-monitor.ts",
+    "fortion": "tsx --env-file-if-exists=.env src/cli/index.ts"
   },
   "dependencies": {
     "@binance/agentic-wallet": "1.10.0",
